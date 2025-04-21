@@ -9,7 +9,7 @@ NAM = mypandoc
 
 all:
 	stack build --copy-bins --local-bin-path . && \
-	mv ./mypandoc-exe ./$(NAM)
+	mv ./MyPandoc-exe ./$(NAM)
 
 clean:
 	stack clean
