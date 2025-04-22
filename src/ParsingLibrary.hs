@@ -216,11 +216,20 @@ intingeger = orElse
   natural
 
 -- | Tuple (a,b) entre parenthèses
-tupleP::Parser a -> Parser (a, a)
-tupleP p =
-  thenP (char '(') $ \_ s1 ->
-  thenP p $ \x s2 ->
-  thenP (char ',') $ \_ s3 ->
-  thenP p $ \y s4 ->
-  thenP (char ')') $ \_ s5 ->
-    Just ((x, y), s5)
+tupleP :: Parser a -> Parser (a, a)
+tupleP p = Parser $ \input ->
+  case run (char '(') input of
+    Nothing -> Nothing
+    Just (_, s1) ->
+      case run p s1 of
+        Nothing -> Nothing
+        Just (x, s2) ->
+          case run (char ',') s2 of
+            Nothing -> Nothing
+            Just (_, s3) ->
+              case run p s3 of
+                Nothing -> Nothing
+                Just (y, s4) ->
+                  case run (char ')') s4 of
+                    Nothing -> Nothing
+                    Just (_, s5) -> Just ((x, y), s5)
