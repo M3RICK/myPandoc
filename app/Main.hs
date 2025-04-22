@@ -1,8 +1,8 @@
 module Main (main) where
 
-import Lib
-import CustomParser
+import ParsingLibrary
 import Control.Exception (assert)
+import Data.Char (toUpper)
 
 main :: IO ()
 main = do
@@ -84,5 +84,6 @@ main = do
 
   -- tupleP
   assert (run (tupleP natural) "(1,2)x" == Just ((1,2), "x")) $ putStrLn "tupleP test passed"
+
 
   putStrLn "✅ All tests passed!"

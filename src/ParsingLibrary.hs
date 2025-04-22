@@ -7,7 +7,7 @@
 
 --  A NOTER QUE P A LA FIN DE CHAQUE MERDE C EST POUR PARSER par exemple ma biche manyP, many PARSEEEEEEEEEEEEEER
 
-module CustomParser
+module ParsingLibrary
   ( ParseResult
   , Parser(..)
   , run
@@ -44,7 +44,7 @@ module CustomParser
   , exactWord
 
   , natural
-  , integer
+  , intingeger
   , tupleP
   ) where
 

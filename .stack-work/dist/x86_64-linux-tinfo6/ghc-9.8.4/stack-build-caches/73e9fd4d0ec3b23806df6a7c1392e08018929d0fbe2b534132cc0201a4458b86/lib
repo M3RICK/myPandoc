@@ -1,3 +1,5 @@
+? /home/dirty/.stack/programs/x86_64-linux/ghc-tinfo6-9.8.4/lib/ghc-9.8.4/lib/x86_64-linux-ghc-9.8.4/rts-1.0.2/include/ghcversion.h
+: hash: 95162794a3bf5e6167631fdd41a509846597231d523d0f21a76713b1f801373c
 /home/dirty/Epitech/Tek2/FUN/myPandoc/myPandoc/.stack-work/dist/x86_64-linux-tinfo6/ghc-9.8.4/build/autogen/Paths_MyPandoc.hs:
   hash: a76579f4693981fd20c29ada3e274676fecd63af3a47fadc834297b1ed522ee4
 /home/dirty/Epitech/Tek2/FUN/myPandoc/myPandoc/CHANGELOG.md:
@@ -11,4 +13,6 @@
 /home/dirty/Epitech/Tek2/FUN/myPandoc/myPandoc/src/Lib.hs:
   hash: 11d6d255cb397fa45980eb516ea685146565d9de2108c4eea356ea41db8364be
 /home/dirty/Epitech/Tek2/FUN/myPandoc/myPandoc/src/ParsingLibrary.hs:
-  hash: 9be30a1b8e8b42955bc48880ecb634dc4c7077185c9e69878aa3a2fbba8241d2
+  hash: 1865b01be488b5e8b351eb8bd514de51ea1185e85a3573291a94a0a5da36e688
+/usr/include/stdc-predef.h:
+  hash: 8db4f65e62cade8ae4d9b77960ee6aee093255acc1b637e3fb37d79179733b15

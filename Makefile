@@ -1,6 +1,6 @@
 ##
 ## EPITECH PROJECT, 2024
-## myPandoc
+## IMAGE COMPRESSOR
 ## File description:
 ## Makefile
 ##
