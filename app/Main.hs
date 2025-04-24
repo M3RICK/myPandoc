@@ -1,3 +1,4 @@
+
 module Main (main) where
 
 import System.Environment (getArgs)
@@ -5,94 +6,73 @@ import System.Exit (exitWith, ExitCode(..))
 import Control.Exception (assert)
 import Data.Char (toUpper)
 import ArgsParser (parseArgs, ConvertInfo(..))
-import Document (Document)
+import Document (Document(..), Header(..), Content(..))
 import ParsingLibrary (run)
+import xmlParser (parseXml)
 
+-- | Test XML parsing with a simple example
+testXmlParser :: IO ()
+testXmlParser = do
+    let simpleXml = "<document>\
+                    \  <header title=\"Simple Test\" author=\"Tester\" date=\"2024-04-24\"></header>\
+                    \  <body>\
+                    \    <paragraph>This is a simple test.</paragraph>\
+                    \    <section>This is a section.</section>\
+                    \  </body>\
+                    \</document>"
+
+    putStrLn "Testing XML Parser with simple XML..."
+    case run parseXml simpleXml of
+        Nothing -> do
+            putStrLn "❌ Failed to parse XML!"
+            exitWith (ExitFailure 84)
+        Just (doc, remaining) -> do
+            putStrLn "✅ Successfully parsed XML!"
+            putStrLn $ "Document title: " ++ title (header doc)
+            putStrLn $ "Document author: " ++ show (author (header doc))
+            putStrLn $ "Document date: " ++ show (date (header doc))
+            putStrLn $ "Content count: " ++ show (length (content doc))
+            putStrLn $ "Remaining text: " ++ show remaining
+            putStrLn "XML parsing test completed successfully."
+
+-- | Test XML parser with a more complex example
+testComplexXml :: IO ()
+testComplexXml = do
+    let complexXml = "<document>\
+                     \  <header title=\"Complex Example\" author=\"Advanced User\"></header>\
+                     \  <body>\
+                     \    <section title=\"Introduction\">\
+                     \      <paragraph>This is a paragraph in a section.</paragraph>\
+                     \      <paragraph>This is another paragraph.</paragraph>\
+                     \    </section>\
+                     \    <paragraph>This is outside any section.</paragraph>\
+                     \  </body>\
+                     \</document>"
+
+    putStrLn "\nTesting XML Parser with complex XML..."
+    case run parseXml complexXml of
+        Nothing -> do
+            putStrLn "❌ Failed to parse complex XML!"
+            exitWith (ExitFailure 84)
+        Just (doc, _) -> do
+            putStrLn "✅ Successfully parsed complex XML!"
+            putStrLn $ "Content count: " ++ show (length (content doc))
+            putStrLn "Complex XML test completed successfully."
+
+-- | Main function to run the tests
 main :: IO ()
 main = do
     args <- getArgs
-    convertInfo <- parseArgs args
-    return ()
--- main = do
---   args <- getArgs
---   putStrLn "Running ParserLib tests..."
 
---   -- char
---   assert (run (char 'a') "abc" == Just ('a', "bc")) $ putStrLn "char test passed"
-
---   -- oneOf
---   assert (run (oneOf "aeiou") "apple" == Just ('a', "pple")) $ putStrLn "oneOf test passed"
-
---   -- noneOf
---   assert (run (noneOf "xyz") "hello" == Just ('h', "ello")) $ putStrLn "noneOf test passed"
-
---   -- satisfy
---   assert (run (satisfy (== 'z')) "zoo" == Just ('z', "oo")) $ putStrLn "satisfy test passed"
-
---   -- orElse
---   assert (run (char 'x' `orElse` char 'y') "yup" == Just ('y', "up")) $ putStrLn "orElse test passed"
-
---   -- pairP
---   assert (run (pairP (char 'a') (char 'b')) "abc" == Just (('a','b'), "c")) $ putStrLn "pairP test passed"
-
---   -- mapP
---   assert (run (mapP toUpper (char 'a')) "abc" == Just ('A', "bc")) $ putStrLn "mapP test passed"
-
---   -- map2P
---   assert (run (map2P (:) (char 'a') (manyP (char 'b'))) "abbb" == Just ("abbb", "")) $ putStrLn "map2P test passed"
-
---   -- manyP
---   assert (run (manyP (char 'x')) "xxxy" == Just ("xxx", "y")) $ putStrLn "manyP test passed"
-
---   -- someP
---   assert (run (someP digit) "123abc" == Just ("123", "abc")) $ putStrLn "someP test passed"
-
---   -- optionP
---   assert (run (optionP 'z' (char 'x')) "abc" == Just ('z', "abc")) $ putStrLn "optionP test passed"
-
---   -- stringP
---   assert (run (stringP "hello") "hello world" == Just ("hello", " world")) $ putStrLn "stringP test passed"
-
---   -- digit
---   assert (run digit "9abc" == Just ('9', "abc")) $ putStrLn "digit test passed"
-
---   -- letter
---   assert (run letter "h3llo" == Just ('h', "3llo")) $ putStrLn "letter test passed"
-
---   -- alphaNum
---   assert (run alphaNum "a9!" == Just ('a', "9!")) $ putStrLn "alphaNum test passed"
-
---   -- space
---   assert (run space "  abc" == Just (' ', " abc")) $ putStrLn "space test passed"
-
---   -- skipSpaces
---   assert (run skipSpaces "   abc" == Just ("   ", "abc")) $ putStrLn "skipSpaces test passed"
-
---   -- token
---   assert (run (token (char 'a')) "a   bc" == Just ('a', "bc")) $ putStrLn "token test passed"
-
---   -- whitespaces
---   assert (run whitespaces " \t\nx" == Just (" \t\n", "x")) $ putStrLn "whitespaces test passed"
-
---   -- skipWhitespace
---   assert (run skipWhitespace " \n\rabc" == Just (" \n\r", "abc")) $ putStrLn "skipWhitespace test passed"
-
---   -- word
---   assert (run word "hello123 world" == Just ("hello123", " world")) $ putStrLn "word test passed"
-
---   -- exactWord
---   assert (run (exactWord "hello") "hello world" == Just ("hello", " world")) $ putStrLn "exactWord test passed"
---   assert (run (exactWord "hello") "hellothere" == Nothing) $ putStrLn "exactWord failure test passed"
-
---   -- natural
---   assert (run natural "1234abc" == Just (1234, "abc")) $ putStrLn "natural test passed"
-
---   -- intingeger (yes thierry)
---   assert (run intingeger "-42x" == Just (-42, "x")) $ putStrLn "intingeger (-) test passed"
---   assert (run intingeger "13x" == Just (13, "x")) $ putStrLn "intingeger (+) test passed"
-
---   -- tupleP
---   assert (run (tupleP natural) "(1,2)x" == Just ((1,2), "x")) $ putStrLn "tupleP test passed"
-
-
---   putStrLn "✅ All tests passed!"
+    if null args || head args == "test"
+        then do
+            putStrLn "Running XML Parser tests..."
+            testXmlParser
+            testComplexXml
+            putStrLn "\nAll tests completed successfully!"
+        else do
+            -- Original main code for when not testing
+            convertInfo <- parseArgs args
+            putStrLn "Running in normal mode (not testing)"
+            -- You can add your normal application logic here
+            return ()
