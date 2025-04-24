@@ -5,9 +5,13 @@
 -- Its parsin time
 -}
 
-module CustomXmlParser
+module XmlParser
     ( parseXml
     , XmlParseResult
+    , parseDocBegin
+    , parseHeaderSection
+    , parseBodyContent
+    , parseDocEnd
     ) where
 
 import ParsingLibrary
@@ -272,7 +276,7 @@ parseXml = thenP skipWhite $ \_ input ->
         Just (_, afterDocOpen) ->
             parseDocStructure afterDocOpen
 
-parseDocStructure::String -> Maybe (Document, String)
+parseDocStructure :: String -> Maybe (Document, String)
 parseDocStructure input = case run parseHeaderSection input of
     Nothing -> Nothing
     Just (hdr, afterHeader) ->

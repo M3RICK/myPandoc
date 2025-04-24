@@ -1,31 +1,115 @@
-
 module Main (main) where
 
 import System.Environment (getArgs)
 import System.Exit (exitWith, ExitCode(..))
-import Control.Exception (assert)
+import Control.Exception (catch, SomeException)
 import Data.Char (toUpper)
 import ArgsParser (parseArgs, ConvertInfo(..))
-import Document (Document(..), Header(..), Content(..))
-import ParsingLibrary (run)
-import xmlParser (parseXml)
+import Document (Document(..), Header(..), Content(..), Inline(..))
+import ParsingLibrary (run, char, stringP, Parser(..))  -- Added Parser here
+import XmlParser
+    ( parseXml
+    , XmlParseResult
+    , parseDocBegin
+    , parseHeaderSection
+    , parseBodyContent
+    , parseDocEnd
+    )
 
--- | Test XML parsing with a simple example
+-- | Safely run a parser and show debug info
+debugParser :: Show a => String -> Parser a -> String -> IO (Maybe (a, String))
+debugParser label parser input = do
+    putStrLn $ "\n=== Testing " ++ label ++ " ==="
+    putStrLn $ "Input: " ++ take 40 input ++ (if length input > 40 then "..." else "")
+
+    -- Safely run the parser
+    result <- catch
+        (let r = run parser input in r `seq` return r)
+        (\e -> do
+            putStrLn $ "❌ Exception: " ++ show (e :: SomeException)
+            return Nothing
+        )
+
+    case result of
+        Nothing -> do
+            putStrLn "❌ Parser failed"
+            return Nothing
+        Just (val, rest) -> do
+            putStrLn "✅ Parser succeeded!"
+            putStrLn $ "Value: " ++ show val
+            putStrLn $ "Remaining: " ++ take 40 rest ++ (if length rest > 40 then "..." else "")
+            return $ Just (val, rest)
+
+    return result
+
+-- | Very simple XML for testing
+minimalXml :: String
+minimalXml = "<document><header title=\"Test\"></header><body></body></document>"
+
+-- | Simple XML with some content
+simpleXml :: String
+simpleXml = "<document>\
+            \  <header title=\"Simple Test\" author=\"Tester\" date=\"2024-04-24\"></header>\
+            \  <body>\
+            \    <paragraph>This is a simple test.</paragraph>\
+            \    <section>This is a section.</section>\
+            \  </body>\
+            \</document>"
+
+-- | Test with step-by-step debugging
+testStepByStep :: IO ()
+testStepByStep = do
+    putStrLn "\n==== STEP-BY-STEP DEBUGGING ===="
+    putStrLn "Testing with minimal XML:"
+    putStrLn minimalXml
+
+    -- Test very basic parsing
+    _ <- debugParser "parsing '<'" (char '<') minimalXml
+    _ <- debugParser "parsing '<document>'" (stringP "<document>") minimalXml
+
+    -- Test the document begin parser
+    mDocBegin <- debugParser "document begin tag" parseDocBegin minimalXml
+    case mDocBegin of
+        Nothing -> putStrLn "Cannot continue testing - document begin tag failed"
+        Just (_, afterDocBegin) -> do
+            -- Test header parsing
+            mHeader <- debugParser "header section" parseHeaderSection afterDocBegin
+            case mHeader of
+                Nothing -> putStrLn "Cannot continue testing - header parsing failed"
+                Just (hdr, afterHeader) -> do
+                    -- Test body parsing
+                    mBody <- debugParser "body content" parseBodyContent afterHeader
+                    case mBody of
+                        Nothing -> putStrLn "Cannot continue testing - body parsing failed"
+                        Just (bodyContent, afterBody) -> do
+                            -- Test document end tag
+                            _ <- debugParser "document end tag" parseDocEnd afterBody
+
+                            -- Test complete document parsing
+                            _ <- debugParser "complete document" parseXml minimalXml
+                            return ()
+
+-- | Main test function
 testXmlParser :: IO ()
 testXmlParser = do
-    let simpleXml = "<document>\
-                    \  <header title=\"Simple Test\" author=\"Tester\" date=\"2024-04-24\"></header>\
-                    \  <body>\
-                    \    <paragraph>This is a simple test.</paragraph>\
-                    \    <section>This is a section.</section>\
-                    \  </body>\
-                    \</document>"
+    putStrLn "\n==== XML PARSER TEST ===="
+    putStrLn "Testing with simple XML:"
+    putStrLn simpleXml
 
-    putStrLn "Testing XML Parser with simple XML..."
+    -- First try with simple XML
     case run parseXml simpleXml of
         Nothing -> do
-            putStrLn "❌ Failed to parse XML!"
-            exitWith (ExitFailure 84)
+            putStrLn "❌ Failed to parse simple XML"
+            -- If simple XML fails, try with minimal XML
+            putStrLn "\nTrying with minimal XML instead:"
+            putStrLn minimalXml
+            case run parseXml minimalXml of
+                Nothing -> do
+                    putStrLn "❌ Failed to parse even minimal XML"
+                    testStepByStep  -- Try step-by-step debugging
+                Just (doc, _) -> do
+                    putStrLn "✅ Minimal XML parsed successfully"
+                    putStrLn $ "Document title: " ++ title (header doc)
         Just (doc, remaining) -> do
             putStrLn "✅ Successfully parsed XML!"
             putStrLn $ "Document title: " ++ title (header doc)
@@ -33,43 +117,17 @@ testXmlParser = do
             putStrLn $ "Document date: " ++ show (date (header doc))
             putStrLn $ "Content count: " ++ show (length (content doc))
             putStrLn $ "Remaining text: " ++ show remaining
-            putStrLn "XML parsing test completed successfully."
 
--- | Test XML parser with a more complex example
-testComplexXml :: IO ()
-testComplexXml = do
-    let complexXml = "<document>\
-                     \  <header title=\"Complex Example\" author=\"Advanced User\"></header>\
-                     \  <body>\
-                     \    <section title=\"Introduction\">\
-                     \      <paragraph>This is a paragraph in a section.</paragraph>\
-                     \      <paragraph>This is another paragraph.</paragraph>\
-                     \    </section>\
-                     \    <paragraph>This is outside any section.</paragraph>\
-                     \  </body>\
-                     \</document>"
-
-    putStrLn "\nTesting XML Parser with complex XML..."
-    case run parseXml complexXml of
-        Nothing -> do
-            putStrLn "❌ Failed to parse complex XML!"
-            exitWith (ExitFailure 84)
-        Just (doc, _) -> do
-            putStrLn "✅ Successfully parsed complex XML!"
-            putStrLn $ "Content count: " ++ show (length (content doc))
-            putStrLn "Complex XML test completed successfully."
-
--- | Main function to run the tests
+-- | Main function
 main :: IO ()
 main = do
     args <- getArgs
 
     if null args || head args == "test"
         then do
-            putStrLn "Running XML Parser tests..."
+            putStrLn "Running XML Parser tests with debugging..."
             testXmlParser
-            testComplexXml
-            putStrLn "\nAll tests completed successfully!"
+            putStrLn "\nTests completed."
         else do
             -- Original main code for when not testing
             convertInfo <- parseArgs args

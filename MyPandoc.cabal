@@ -29,6 +29,7 @@ library
       Document
       Lib
       ParsingLibrary
+      XmlParser
   other-modules:
       Paths_MyPandoc
   autogen-modules:
