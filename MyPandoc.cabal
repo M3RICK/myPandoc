@@ -25,6 +25,8 @@ source-repository head
 
 library
   exposed-modules:
+      ArgsParser
+      Document
       Lib
       ParsingLibrary
   other-modules:
