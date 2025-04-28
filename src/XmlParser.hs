@@ -1,8 +1,8 @@
 {-
--- EPITECH PROJECT, 2025
--- xmlParser.hs
+-- EPITECH PROJECT, 2024
+-- MyPandoc
 -- File description:
--- Its parsin time
+-- XML Parser implementation for document conversion
 -}
 
 module XmlParser
@@ -22,55 +22,36 @@ import Data.List (intercalate)
 -- | The result type from parsing XML
 type XmlParseResult = Maybe (Document, String)
 
--- ===========================================
--- CHARACTER HANDLING                        =
--- ===========================================
+-- | Check if a character is XML whitespace
+isXmlSpace::Char -> Bool
+isXmlSpace c = c == ' ' || c == '\t' || c == '\n' || c == '\r'
 
-isWhitespace::Char -> Bool
-isWhitespace c = c == ' ' || c == '\t' || c == '\n' || c == '\r'
-
+-- | Skip whitespace characters
 skipWhite::Parser String
-skipWhite = manyP (satisfy isWhitespace)
+skipWhite = manyP (satisfy isXmlSpace)
 
-gatherUntil::Char -> String -> Maybe (String, String)
-gatherUntil stopChar = gather []
-  where
-    gather result (c:rest) | c == stopChar = Just (reverse result, rest)
-    gather result (c:rest) = gather (c:result) rest
-    gather _ [] = Nothing
+-- | Apply a parser after skipping whitespace
+applyAfterWhite::Parser a -> Parser a
+applyAfterWhite p = thenP skipWhite $ \_ input -> run p input
 
-findChar::Char -> String -> Maybe ((), String)
-findChar expected str =
-    let trimmed = dropWhile isWhitespace str
-    in if null trimmed then Nothing
-       else if head trimmed == expected
-            then Just ((), tail trimmed)
-            else Nothing
-
-
--- ===========================================
--- ATTRIBUTE HELPERS                         =
--- ===========================================
-
+-- | Extract attribute with default value
 getAttrOrDefault::String -> [(String, String)] -> String -> String
 getAttrOrDefault name attribs fallback =
     case lookup name attribs of
         Just val -> val
         Nothing -> fallback
 
+-- | Extract optional attribute value
 getOptionalAttr::String -> [(String, String)] -> Maybe String
 getOptionalAttr = lookup
 
-makeHeader::[(String, String)] -> Header
-makeHeader attribs = Header
+-- | Create a header from attributes
+buildHeader::[(String, String)] -> Header
+buildHeader attribs = Header
     { title = getAttrOrDefault "title" attribs ""
     , author = getOptionalAttr "author" attribs
     , date = getOptionalAttr "date" attribs
     }
-
--- ===========================================
--- NAME AND IDENTIFIER                       =
--- ===========================================
 
 -- | Parse first character of an XML name
 parseFirstChar::Parser Char
@@ -84,211 +65,290 @@ parseRestChar = orElse alphaNum (oneOf "_-:")
 parseXmlName::Parser String
 parseXmlName = map2P (:) parseFirstChar (manyP parseRestChar)
 
--- | Parse an XML name after skipping whitespace
-parseXmlNameAfterSpace::String -> Maybe (String, String)
-parseXmlNameAfterSpace input = run parseXmlName (dropWhile isWhitespace input)
+-- | Check if input is empty or starts with a tag
+isTagStart::String -> Bool
+isTagStart input = null input || head input == '<'
 
--- ===========================================
--- TEXT CONTENT                              =
--- ===========================================
+-- | Collect text characters until a tag
+collectText::String -> String -> (String, String)
+collectText acc ('<':rest) = (reverse acc, '<':rest)
+collectText acc (c:rest) = collectText (c:acc) rest
+collectText acc [] = (reverse acc, [])
 
--- | Parse plain text until a tag starts
-parseContent::Parser String
-parseContent = thenP currentInput $ \input _ ->
-    extractText input
-  where
-    extractText "" = Just ("", "")
-    extractText input@('<':_) = Just ("", input)
-    extractText input = extractRest [] input
-
-    extractRest acc ('<':rest) = Just (reverse acc, '<':rest)
-    extractRest acc (c:rest) = extractRest (c:acc) rest
-    extractRest acc [] = Just (reverse acc, [])
+-- | Parse text until a tag starts
+parseText::Parser String
+parseText = Parser $ \input ->
+    if isTagStart input then
+        Just ("", input)
+    else
+        Just (collectText [] input)
 
 -- | Convert raw text to document content
-makeTextNode::Parser Content
-makeTextNode = mapP textToContent parseContent
+createTextNode::Parser Content
+createTextNode = mapP toContent parseText
   where
-    textToContent "" = Paragraph []
-    textToContent txt = Paragraph [PlainText txt]
+    toContent "" = Paragraph []
+    toContent txt = Paragraph [PlainText txt]
 
--- ===========================================
--- ATTRIBUTE                                 =
--- ===========================================
+-- | Collect quoted text until end quote
+collectQuoted::String -> String -> Maybe (String, String)
+collectQuoted acc ('"':rest) = Just (reverse acc, rest)
+collectQuoted acc (c:rest) = collectQuoted (c:acc) rest
+collectQuoted _ [] = Nothing
 
 -- | Parse a quoted attribute value
 parseQuotedValue::Parser String
-parseQuotedValue = thenP (char '"') $ \_ input ->
-    gatherUntil '"' input
+parseQuotedValue = Parser $ \input ->
+    case dropWhile isXmlSpace input of
+        ('"':rest) -> collectQuoted [] rest
+        _ -> Nothing
 
 -- | Parse an attribute name
 parseAttrName::Parser String
-parseAttrName = thenP skipWhite $ \_ input ->
-    run parseXmlName input
+parseAttrName = applyAfterWhite parseXmlName
 
--- | Match the equals sign for attributes
-matchEquals::Parser ()
-matchEquals = thenP skipWhite $ \_ input ->
-    case input of
+-- | Parse the equals sign for attributes
+parseEquals::Parser ()
+parseEquals = Parser $ \input ->
+    case dropWhile isXmlSpace input of
         ('=':rest) -> Just ((), rest)
         _ -> Nothing
 
--- | Parse a complete attribute (name="value")
-parseAttr::Parser (String, String)
-parseAttr = thenP parseAttrName $ \name input ->
-    case run matchEquals input of
+-- | Parse attribute value after finding equals sign
+parseAttrValue::String -> String -> Maybe ((String, String), String)
+parseAttrValue name rest2 =
+    case run parseQuotedValue (dropWhile isXmlSpace rest2) of
         Nothing -> Nothing
-        Just (_, afterEq) ->
-            case run parseQuotedValue (dropWhile isWhitespace afterEq) of
-                Nothing -> Nothing
-                Just (value, remaining) -> Just ((name, value), remaining)
+        Just (value, rest3) -> Just ((name, value), rest3)
+
+-- | Handle equals sign in attribute parsing
+handleAttrEquals::String -> String -> Maybe ((String, String), String)
+handleAttrEquals name rest1 =
+    case run parseEquals rest1 of
+        Nothing -> Nothing
+        Just (_, rest2) -> parseAttrValue name rest2
+
+-- | Parse a complete attribute (name="value")
+parseAttribute::Parser (String, String)
+parseAttribute = Parser $ \input ->
+    case run parseAttrName input of
+        Nothing -> Nothing
+        Just (name, rest1) -> handleAttrEquals name rest1
 
 -- | Parse multiple attributes
-parseAttrs::Parser [(String, String)]
-parseAttrs = manyP parseAttr
+parseAttributes::Parser [(String, String)]
+parseAttributes = manyP parseAttribute
 
--- ===========================================
--- TAG                                       =
--- ===========================================
+-- | Parse document begin tag
+parseDocBegin::Parser ()
+parseDocBegin = mapP (const ()) (applyAfterWhite (stringP "<document>"))
 
-openAngle::Parser Char
-openAngle = char '<'
+-- | Parse a tag opener with a name
+parseTagOpener::String -> Parser ()
+parseTagOpener tagName = mapP (const ())
+    (applyAfterWhite (stringP ("<" ++ tagName)))
 
-closeAngle::Parser Char
-closeAngle = char '>'
+-- | Find closing angle bracket after attributes
+findClosingAngle::[(String, String)] -> String -> Maybe ([(String, String)], String)
+findClosingAngle attrs rest2 =
+    case dropWhile isXmlSpace rest2 of
+        ('>':rest3) -> Just (attrs, rest3)
+        _ -> Nothing
 
-parseTagBegin::Parser String
-parseTagBegin = thenP openAngle $ \_ input ->
-    run parseXmlName (dropWhile isWhitespace input)
-
-parseStartTag::Parser (String, [(String, String)])
-parseStartTag = thenP parseTagBegin $ \tagName input ->
-    case run parseAttrs input of
+-- | Parse attributes and find closing angle
+parseAttrsAndClose::String -> Maybe ([(String, String)], String)
+parseAttrsAndClose rest1 =
+    case run parseAttributes rest1 of
         Nothing -> Nothing
-        Just (attributes, afterAttrs) ->
-            case dropWhile isWhitespace afterAttrs of
-                ('>':rest) -> Just ((tagName, attributes), rest)
-                _ -> Nothing
+        Just (attrs, rest2) -> findClosingAngle attrs rest2
 
-parseEndPrefix::Parser ()
-parseEndPrefix = thenP (stringP "</") $ \_ rest -> Just ((), rest)
-
-parseEndTag::Parser String
-parseEndTag = thenP parseEndPrefix $ \_ input ->
-    case run parseXmlName (dropWhile isWhitespace input) of
+-- | Parse a tag opener with attributes
+parseOpeningTag::String -> Parser [(String, String)]
+parseOpeningTag tagName = Parser $ \input ->
+    case run (parseTagOpener tagName) input of
         Nothing -> Nothing
-        Just (name, afterName) ->
-            case dropWhile isWhitespace afterName of
-                ('>':rest) -> Just (name, rest)
-                _ -> Nothing
+        Just (_, rest1) -> parseAttrsAndClose rest1
 
--- ===========================================
--- ELEMENT                                   =
--- ===========================================
+-- | Find closing angle bracket for end tag
+findEndTagClose::String -> Maybe ((), String)
+findEndTagClose rest2 =
+    case dropWhile isXmlSpace rest2 of
+        ('>':rest3) -> Just ((), rest3)
+        _ -> Nothing
 
+-- | Parse tag name in closing tag
+parseEndTagName::String -> String -> Maybe ((), String)
+parseEndTagName tagName rest1 =
+    case run (applyAfterWhite $ stringP tagName) rest1 of
+        Nothing -> Nothing
+        Just (_, rest2) -> findEndTagClose rest2
+
+-- | Parse a closing tag prefix
+parseClosePrefix::String -> Maybe ((), String)
+parseClosePrefix input =
+    case run (stringP ("</")) (dropWhile isXmlSpace input) of
+        Nothing -> Nothing
+        Just (_, rest1) -> Just ((), rest1)
+
+-- | Parse a closing tag
+parseClosingTag::String -> Parser ()
+parseClosingTag tagName = applyAfterWhite $ Parser $ \input ->
+    case parseClosePrefix input of
+        Nothing -> Nothing
+        Just (_, rest1) -> parseEndTagName tagName rest1
+
+-- | Parse header closing tag
+parseHeaderClose::[(String, String)] -> String -> Maybe (Header, String)
+parseHeaderClose attrs rest1 =
+    case run (parseClosingTag "header") rest1 of
+        Nothing -> Nothing
+        Just (_, rest2) -> Just (buildHeader attrs, rest2)
+
+-- | Parse the header section
+parseHeaderSection::Parser Header
+parseHeaderSection = Parser $ \input ->
+    case run (parseOpeningTag "header") input of
+        Nothing -> Nothing
+        Just (attrs, rest1) -> parseHeaderClose attrs rest1
+
+-- | Parse document body begin tag
+parseBodyBegin::Parser ()
+parseBodyBegin = applyAfterWhite $ mapP (const ()) (stringP "<body>")
+
+-- | Parse document body end tag
+parseBodyEnd::Parser ()
+parseBodyEnd = applyAfterWhite $ mapP (const ()) (stringP "</body>")
+
+-- | Parse document end tag
+parseDocEnd::Parser ()
+parseDocEnd = applyAfterWhite $ mapP (const ()) (stringP "</document>")
+
+-- | Parse paragraph content
+parseParagraphContent::String -> Maybe (Content, String)
+parseParagraphContent rest1 =
+    case run parseText rest1 of
+        Nothing -> Nothing
+        Just (text, rest2) -> closeParagraph text rest2
+
+-- | Handle paragraph closing tag
+closeParagraph::String -> String -> Maybe (Content, String)
+closeParagraph text rest2 =
+    case run (applyAfterWhite $ stringP "</paragraph>") rest2 of
+        Nothing -> Nothing
+        Just (_, rest3) -> Just (Paragraph [PlainText text], rest3)
+
+-- | Parse a paragraph element
+parseParagraph::Parser Content
+parseParagraph = Parser $ \input ->
+    case run (applyAfterWhite $ stringP "<paragraph>") input of
+        Nothing -> Nothing
+        Just (_, rest1) -> parseParagraphContent rest1
+
+-- | Parse section attributes
+parseSectionAttrs::String -> Maybe (Content, String)
+parseSectionAttrs rest1 =
+    case run parseAttributes rest1 of
+        Nothing -> Nothing
+        Just (attrs, rest2) -> findSectionClose attrs rest2
+
+-- | Find section closing angle bracket
+findSectionClose::[(String, String)] -> String -> Maybe (Content, String)
+findSectionClose attrs rest2 =
+    case dropWhile isXmlSpace rest2 of
+        ('>':rest3) -> parseSectionContent attrs rest3
+        _ -> Nothing
+
+-- | Parse section content
+parseSectionContent::[(String, String)] -> String -> Maybe (Content, String)
+parseSectionContent attrs rest3 =
+    case run parseContent rest3 of
+        Nothing -> Nothing
+        Just (children, rest4) -> closeSection attrs children rest4
+
+-- | Handle section closing tag
+closeSection::[(String, String)] -> [Content] -> String -> Maybe (Content, String)
+closeSection attrs children rest4 =
+    case run (applyAfterWhite $ stringP "</section>") rest4 of
+        Nothing -> Nothing
+        Just (_, rest5) -> Just (Section (lookup "title" attrs) children, rest5)
+
+-- | Parse a section element
+parseSection::Parser Content
+parseSection = Parser $ \input ->
+    case run (applyAfterWhite $ stringP "<section") input of
+        Nothing -> Nothing
+        Just (_, rest1) -> parseSectionAttrs rest1
+
+-- | Check if the input starts with specific tag prefix
+startsWithTag::String -> String -> Int -> Bool
+startsWithTag input prefix maxLen =
+    let prefixLen = length prefix
+        inputPrefix = take prefixLen (take maxLen input)
+    in inputPrefix == prefix
+
+-- | Check tag type for a non-empty input
+checkSpecificTagType::String -> Maybe (Content, String)
+checkSpecificTagType trimmed
+    | startsWithTag trimmed "<paragraph>" 11 = run parseParagraph trimmed
+    | startsWithTag trimmed "<section" 8 = run parseSection trimmed
+    | startsWithTag trimmed "</" 2 = Nothing
+    | otherwise = run createTextNode trimmed
+
+-- | Determine node type and parse accordingly
 decideNodeType::String -> Maybe (Content, String)
 decideNodeType input
     | null input = Nothing
-    | head input == '<' && take 2 input /= "</" = run parseXmlElement input
-    | otherwise = run makeTextNode input
+    | head (dropWhile isXmlSpace input) /= '<' = run createTextNode input
+    | otherwise = checkSpecificTagType (dropWhile isXmlSpace input)
 
+-- | Parse any XML node
 parseNode::Parser Content
-parseNode = thenP skipWhite $ \_ input ->
+parseNode = applyAfterWhite $ Parser $ \input ->
     decideNodeType input
 
-parseElementContent::String -> Parser [Content]
-parseElementContent tagName = thenP currentInput $ \input _ ->
-    accumulateContent tagName [] input
+-- | Parse content (sequence of nodes)
+parseContent::Parser [Content]
+parseContent = manyP parseNode
 
-accumulateContent::String -> [Content] -> String -> Maybe ([Content], String)
-accumulateContent tagName nodes input =
-    case run parseEndTag input of
-        Just (endName, afterEnd) | map toLower endName == map toLower tagName ->
-            Just (reverse nodes, afterEnd)
-        _ -> case run parseNode input of
-            Nothing -> Nothing
-            Just (node, afterNode) ->
-                accumulateContent tagName (node:nodes) afterNode
-
-parseXmlElement::Parser Content
-parseXmlElement = thenP parseStartTag $ \(name, _) afterOpen ->
-    case run (parseElementContent name) afterOpen of
+-- | Finalize body parsing with end tag
+finalizeBody::[Content] -> String -> Maybe ([Content], String)
+finalizeBody contents rest =
+    case run parseBodyEnd rest of
         Nothing -> Nothing
-        Just (children, finalRest) ->
-            Just (Section (Just name) children, finalRest)
+        Just (_, final) -> Just (contents, final)
 
-parseNodeList::Parser [Content]
-parseNodeList = thenP skipWhite $ \_ input ->
-    buildNodeList input
-
-buildNodeList::String -> Maybe ([Content], String)
-buildNodeList input = case run parseNode input of
-    Nothing -> Just ([], input)
-    Just (node, rest) -> case run parseNodeList rest of
-        Nothing -> Just ([node], rest)
-        Just (nodes, finalRest) -> Just (node:nodes, finalRest)
-
--- ===========================================
--- DOCUMENT STRUCTURE                        =
--- ===========================================
-
-parseDocHeader::Parser [(String, String)]
-parseDocHeader = thenP (stringP "<header") $ \_ afterTag ->
-    case run parseAttrs afterTag of
-        Nothing -> Nothing
-        Just (attrs, afterAttrs) ->
-            case dropWhile isWhitespace afterAttrs of
-                ('>':afterClose) -> Just (attrs, afterClose)
-                _ -> Nothing
-
-parseHeaderSection::Parser Header
-parseHeaderSection = thenP parseDocHeader $ \attrs afterOpen ->
-    case run parseEndTag afterOpen of
-        Just (closeName, afterHeader) | map toLower closeName == "header" ->
-            Just (makeHeader attrs, afterHeader)
-        _ -> Nothing
-
-parseBodyBegin::Parser ()
-parseBodyBegin = thenP (stringP "<body>") $ \_ rest -> Just ((), rest)
-
-parseBodyEnd::Parser ()
-parseBodyEnd = thenP (stringP "</body>") $ \_ rest -> Just ((), rest)
-
+-- | Parse the body content
 parseBodyContent::Parser [Content]
-parseBodyContent = thenP parseBodyBegin $ \_ afterOpen ->
-    case run parseNodeList afterOpen of
+parseBodyContent = thenP parseBodyBegin $ \_ input ->
+    case run parseContent input of
         Nothing -> Nothing
-        Just (contents, afterContents) ->
-            case run parseBodyEnd afterContents of
-                Nothing -> Nothing
-                Just (_, afterClose) -> Just (contents, afterClose)
+        Just (contents, rest) -> finalizeBody contents rest
 
-parseDocBegin::Parser ()
-parseDocBegin = thenP (stringP "<body>") $ \_ rest -> Just ((), rest)
-
-parseDocEnd::Parser ()
-parseDocEnd = thenP (stringP "</document>") $ \_ rest -> Just ((), rest)
-
-parseXml::Parser Document
-parseXml = thenP skipWhite $ \_ input ->
-    case run parseDocBegin input of
+-- | Parse document structure
+parseDocStructure::String -> Maybe (Document, String)
+parseDocStructure input =
+    case run parseHeaderSection input of
         Nothing -> Nothing
-        Just (_, afterDocOpen) ->
-            parseDocStructure afterDocOpen
+        Just (hdr, afterHeader) -> parseDocBody hdr afterHeader
 
-parseDocStructure :: String -> Maybe (Document, String)
-parseDocStructure input = case run parseHeaderSection input of
-    Nothing -> Nothing
-    Just (hdr, afterHeader) ->
-        parseDocBody hdr afterHeader
-
+-- | Parse document body after header
 parseDocBody::Header -> String -> Maybe (Document, String)
-parseDocBody hdr input = case run parseBodyContent input of
-    Nothing -> Nothing
-    Just (body, afterBody) ->
-        finalizeDoc hdr body afterBody
+parseDocBody hdr input =
+    case run parseBodyContent input of
+        Nothing -> Nothing
+        Just (body, afterBody) -> finalizeDoc hdr body afterBody
 
+-- | Finalize document parsing with closing tag
 finalizeDoc::Header -> [Content] -> String -> Maybe (Document, String)
-finalizeDoc hdr body input = case run parseDocEnd input of
-    Nothing -> Nothing
-    Just (_, afterDocEnd) -> Just (Document hdr body, afterDocEnd)
+finalizeDoc hdr body input =
+    case run parseDocEnd input of
+        Nothing -> Nothing
+        Just (_, afterDocEnd) -> Just (Document hdr body, afterDocEnd)
+
+-- | Parse a complete XML document
+parseXml::Parser Document
+parseXml = Parser $ \input ->
+    let trimmedInput = dropWhile isXmlSpace input in
+    case run parseDocBegin trimmedInput of
+        Nothing -> Nothing
+        Just (_, rest1) -> parseDocStructure rest1
