@@ -27,6 +27,7 @@ library
   exposed-modules:
       ArgsParser
       Document
+      JsonParser
       Lib
       ParsingLibrary
       XmlParser
