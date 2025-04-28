@@ -171,7 +171,7 @@ parseStartTag = thenP parseTagBegin $ \tagName input ->
                 _ -> Nothing
 
 parseEndPrefix::Parser ()
-parseEndPrefix = thenP (stringP "</") $ \_ _ -> Just ((), "")
+parseEndPrefix = thenP (stringP "</") $ \_ rest -> Just ((), rest)
 
 parseEndTag::Parser String
 parseEndTag = thenP parseEndPrefix $ \_ input ->
@@ -249,10 +249,10 @@ parseHeaderSection = thenP parseDocHeader $ \attrs afterOpen ->
         _ -> Nothing
 
 parseBodyBegin::Parser ()
-parseBodyBegin = thenP (stringP "<body>") $ \_ _ -> Just ((), "")
+parseBodyBegin = thenP (stringP "<body>") $ \_ rest -> Just ((), rest)
 
 parseBodyEnd::Parser ()
-parseBodyEnd = thenP (stringP "</body>") $ \_ _ -> Just ((), "")
+parseBodyEnd = thenP (stringP "</body>") $ \_ rest -> Just ((), rest)
 
 parseBodyContent::Parser [Content]
 parseBodyContent = thenP parseBodyBegin $ \_ afterOpen ->
@@ -264,10 +264,10 @@ parseBodyContent = thenP parseBodyBegin $ \_ afterOpen ->
                 Just (_, afterClose) -> Just (contents, afterClose)
 
 parseDocBegin::Parser ()
-parseDocBegin = thenP (stringP "<document>") $ \_ _ -> Just ((), "")
+parseDocBegin = thenP (stringP "<body>") $ \_ rest -> Just ((), rest)
 
 parseDocEnd::Parser ()
-parseDocEnd = thenP (stringP "</document>") $ \_ _ -> Just ((), "")
+parseDocEnd = thenP (stringP "</document>") $ \_ rest -> Just ((), rest)
 
 parseXml::Parser Document
 parseXml = thenP skipWhite $ \_ input ->
