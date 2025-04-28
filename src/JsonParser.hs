@@ -13,264 +13,308 @@ import ParsingLibrary
 import Document
 import Data.Char (isSpace)
 
--- Type alias for simplicity
-type JsonObject = [(String, JsonValue)]
+-- | Our custom data types for JSON parsing
+type JsonObj = [(String, JsonVal)]
 
-data JsonValue
-    = JsonString String
-    | JsonArray [JsonValue]
-    | JsonObject JsonObject
+data JsonVal
+    = JsonStr String
+    | JsonArr [JsonVal]
+    | JsonObj JsonObj
     deriving (Show)
 
--- | Parse a full JSON document into a Document
+-- | Main entry point - Parse a full JSON document
 parseJson :: Parser Document
-parseJson = Parser $ \input ->
-    case run parseJsonObject (dropWhile isSpace input) of
+parseJson = Parser $ \rawInput ->
+    let input = dropWhile isSpace rawInput in
+    case run findJsonObject input of
         Nothing -> Nothing
-        Just (obj, rest) -> case buildDocument obj of
-            Just doc -> Just (doc, rest)
-            Nothing -> Nothing
+        Just (obj, rest) -> convertToDoc obj rest
 
--- | Parse a JSON string (text surrounded by double quotes)
-parseJsonString :: Parser String
-parseJsonString = Parser $ \input ->
+-- | Convert JSON to document or return Nothing
+convertToDoc :: JsonObj -> String -> Maybe (Document, String)
+convertToDoc obj rest =
+    case jsonToDocument obj of
+        Just doc -> Just (doc, rest)
+        Nothing -> Nothing
+
+-- | Grab a string from inside quotes
+grabJsonString :: Parser String
+grabJsonString = Parser $ \input ->
+    let cleaned = dropWhile isSpace input in
+    case cleaned of
+        ('"':chars) -> extractStringContent "" chars
+        _ -> Nothing
+
+-- | Extract string content between quotes
+extractStringContent :: String -> String -> Maybe (String, String)
+extractStringContent collected ('"':rest) =
+    Just (reverse collected, rest)
+extractStringContent collected ('\\':'"':rest) =
+    extractStringContent ('\"':collected) rest
+extractStringContent collected ('\\':'\\':rest) =
+    extractStringContent ('\\':collected) rest
+extractStringContent collected (char:rest) =
+    extractStringContent (char:collected) rest
+extractStringContent _ [] = Nothing
+
+-- | Object keys are just strings
+getObjectKey :: Parser String
+getObjectKey = grabJsonString
+
+-- | Parse JSON objects {key: value, ...}
+findJsonObject :: Parser JsonObj
+findJsonObject = Parser $ \input ->
     case dropWhile isSpace input of
-        ('"':rest) -> collectString "" rest
-        _ -> Nothing
-  where
-    collectString :: String -> String -> Maybe (String, String)
-    collectString acc ('"':xs) = Just (reverse acc, xs)
-    collectString acc ('\\':'"':xs) = collectString ('\"':acc) xs
-    collectString acc ('\\':'\\':xs) = collectString ('\\':acc) xs
-    collectString acc (x:xs) = collectString (x:acc) xs
-    collectString _ [] = Nothing
-
--- | Parse a JSON key (which is just a string)
-parseJsonKey :: Parser String
-parseJsonKey = parseJsonString
-
--- | Parse a JSON pair (key: value)
-parseJsonPair :: Parser (String, JsonValue)
-parseJsonPair = Parser $ \input ->
-    case run parseJsonKey (dropWhile isSpace input) of
-        Nothing -> Nothing
-        Just (key, rest1) -> parseKeyValue key rest1
-
--- | Helper for parsing the value part of a key-value pair
-parseKeyValue :: String -> String -> Maybe ((String, JsonValue), String)
-parseKeyValue key rest1 =
-    case dropWhile isSpace rest1 of
-        (':':rest2) -> case run parseJsonValue (dropWhile isSpace rest2) of
-            Nothing -> Nothing
-            Just (val, rest3) -> Just ((key, val), rest3)
+        ('{':afterBrace) -> collectObjectPairs [] afterBrace
         _ -> Nothing
 
--- | Parse a JSON object ({ ... })
-parseJsonObject :: Parser JsonObject
-parseJsonObject = Parser $ \input ->
+-- | Helper to collect key-value pairs in objects
+collectObjectPairs :: JsonObj -> String -> Maybe (JsonObj, String)
+collectObjectPairs pairs input =
     case dropWhile isSpace input of
-        ('{':rest) -> parseObjectContent [] rest
-        _ -> Nothing
+        ('}':rest) -> Just (pairs, rest)
+        _ -> parsePairAndContinue pairs input
 
--- | Helper for parsing object contents
-parseObjectContent :: JsonObject -> String -> Maybe (JsonObject, String)
-parseObjectContent acc rest =
-    case dropWhile isSpace rest of
-        ('}':rest') -> Just (acc, rest')
-        _ -> parsePairAndContinue acc rest
-
--- | Helper to parse a pair and continue parsing object
-parsePairAndContinue :: JsonObject -> String -> Maybe (JsonObject, String)
-parsePairAndContinue acc rest =
-    case run parseJsonPair (dropWhile isSpace rest) of
+-- | Parse a pair and continue object parsing
+parsePairAndContinue :: JsonObj -> String -> Maybe (JsonObj, String)
+parsePairAndContinue pairs input =
+    case run getKeyValuePair input of
         Nothing -> Nothing
-        Just (pair, rest') -> parseObjectEnd acc pair rest'
+        Just (pair, afterPair) -> handleAfterPair pairs pair afterPair
 
--- | Helper to handle the end of an object or continue with more pairs
-parseObjectEnd :: JsonObject -> (String, JsonValue) -> String -> Maybe (JsonObject, String)
-parseObjectEnd acc pair rest' =
-    case dropWhile isSpace rest' of
-        ('}':rest'') -> Just (acc ++ [pair], rest'')
-        (',':rest'') -> parseObjectContent (acc ++ [pair]) rest''
+-- | Handle what comes after a key-value pair
+handleAfterPair :: JsonObj -> (String, JsonVal) -> String -> Maybe (JsonObj, String)
+handleAfterPair pairs pair afterPair =
+    case dropWhile isSpace afterPair of
+        ('}':rest) -> Just (pairs ++ [pair], rest)
+        (',':moreStuff) -> collectObjectPairs (pairs ++ [pair]) moreStuff
         _ -> Nothing
 
--- | Parse a JSON array ([ ... ])
-parseJsonArray :: Parser [JsonValue]
-parseJsonArray = Parser $ \input ->
+-- | Parse a key:value pair
+getKeyValuePair :: Parser (String, JsonVal)
+getKeyValuePair = Parser $ \input ->
+    case run getObjectKey (dropWhile isSpace input) of
+        Nothing -> Nothing
+        Just (key, afterKey) -> parseKeyValueRest key afterKey
+
+-- | Parse the rest of a key:value pair after the key
+parseKeyValueRest :: String -> String -> Maybe ((String, JsonVal), String)
+parseKeyValueRest key afterKey =
+    case dropWhile isSpace afterKey of
+        (':':afterColon) -> parseAfterColon key afterColon
+        _ -> Nothing
+
+-- | Parse what comes after the colon in a key:value pair
+parseAfterColon :: String -> String -> Maybe ((String, JsonVal), String)
+parseAfterColon key afterColon =
+    case run parseJsonValue (dropWhile isSpace afterColon) of
+        Nothing -> Nothing
+        Just (value, afterValue) -> Just ((key, value), afterValue)
+
+-- | Parse JSON arrays
+grabJsonArray :: Parser [JsonVal]
+grabJsonArray = Parser $ \input ->
     case dropWhile isSpace input of
-        ('[':rest) -> parseArrayContent [] rest
+        ('[':afterBracket) -> collectArrayItems [] afterBracket
         _ -> Nothing
 
--- | Helper for parsing array contents
-parseArrayContent :: [JsonValue] -> String -> Maybe ([JsonValue], String)
-parseArrayContent acc rest =
-    case dropWhile isSpace rest of
-        (']':rest') -> Just (acc, rest')
-        _ -> parseValueAndContinue acc rest
+-- | Collect items in a JSON array
+collectArrayItems :: [JsonVal] -> String -> Maybe ([JsonVal], String)
+collectArrayItems items input =
+    case dropWhile isSpace input of
+        (']':rest) -> Just (items, rest)
+        _ -> parseItemAndContinue items input
 
--- | Helper to parse a value and continue parsing array
-parseValueAndContinue :: [JsonValue] -> String -> Maybe ([JsonValue], String)
-parseValueAndContinue acc rest =
-    case run parseJsonValue (dropWhile isSpace rest) of
+-- | Parse an item and continue array parsing
+parseItemAndContinue :: [JsonVal] -> String -> Maybe ([JsonVal], String)
+parseItemAndContinue items input =
+    case run parseJsonValue input of
         Nothing -> Nothing
-        Just (val, rest') -> parseArrayEnd acc val rest'
+        Just (value, afterValue) -> handleAfterValue items value afterValue
 
--- | Helper to handle the end of an array or continue with more values
-parseArrayEnd :: [JsonValue] -> JsonValue -> String -> Maybe ([JsonValue], String)
-parseArrayEnd acc val rest' =
-    case dropWhile isSpace rest' of
-        (']':rest'') -> Just (acc ++ [val], rest'')
-        (',':rest'') -> parseArrayContent (acc ++ [val]) rest''
+-- | Handle what comes after a value in an array
+handleAfterValue :: [JsonVal] -> JsonVal -> String -> Maybe ([JsonVal], String)
+handleAfterValue items value afterValue =
+    case dropWhile isSpace afterValue of
+        (']':rest) -> Just (items ++ [value], rest)
+        (',':moreStuff) -> collectArrayItems (items ++ [value]) moreStuff
         _ -> Nothing
 
--- | Parse a JSON value (string, object, or array)
-parseJsonValue :: Parser JsonValue
+-- | Parse any JSON value - the main recursive parser
+parseJsonValue :: Parser JsonVal
 parseJsonValue = Parser $ \input ->
-    let trimmed = dropWhile isSpace input in
-    case run parseJsonString trimmed of
-        Just (str, rest) -> Just (JsonString str, rest)
-        Nothing -> tryParseArray trimmed
+    let cleaned = dropWhile isSpace input in
+    case run grabJsonString cleaned of
+        Just (str, rest) -> Just (JsonStr str, rest)
+        Nothing -> tryParseArray cleaned
 
--- | Try to parse an array, if that fails try to parse an object
-tryParseArray :: String -> Maybe (JsonValue, String)
+-- | Try to parse an array, or fall back to object
+tryParseArray :: String -> Maybe (JsonVal, String)
 tryParseArray input =
-    case run parseJsonArray input of
-        Just (arr, rest) -> Just (JsonArray arr, rest)
+    case run grabJsonArray input of
+        Just (arr, rest) -> Just (JsonArr arr, rest)
         Nothing -> tryParseObject input
 
 -- | Try to parse an object
-tryParseObject :: String -> Maybe (JsonValue, String)
+tryParseObject :: String -> Maybe (JsonVal, String)
 tryParseObject input =
-    case run parseJsonObject input of
-        Just (obj, rest) -> Just (JsonObject obj, rest)
+    case run findJsonObject input of
+        Just (obj, rest) -> Just (JsonObj obj, rest)
         Nothing -> Nothing
 
--- | Build a Document from a JSON object
-buildDocument :: JsonObject -> Maybe Document
-buildDocument obj = do
+-- | Convert parsed JSON to Document
+jsonToDocument :: JsonObj -> Maybe Document
+jsonToDocument obj = do
     hdrVal <- lookup "header" obj
     bodyVal <- lookup "body" obj
-    hdr <- buildHeaderFromJson hdrVal
-    body <- buildBodyFromJson bodyVal
+    hdr <- extractHeader hdrVal
+    body <- extractBody bodyVal
     return (Document hdr body)
 
--- | Build a Header from a JSON value
-buildHeaderFromJson :: JsonValue -> Maybe Header
-buildHeaderFromJson (JsonObject fields) = do
-    title' <- getFieldAsString "title" fields
-    let author' = getFieldAsString "author" fields
-    let date' = getFieldAsString "date" fields
+-- | Extract header from JSON
+extractHeader :: JsonVal -> Maybe Header
+extractHeader (JsonObj fields) = do
+    titleVal <- lookup "title" fields
+    title' <- extractString titleVal
+    let author' = lookup "author" fields >>= extractString
+    let date' = lookup "date" fields >>= extractString
     return $ Header title' author' date'
-buildHeaderFromJson _ = Nothing
+extractHeader _ = Nothing
 
--- | Extract string field from object
-getFieldAsString :: String -> JsonObject -> Maybe String
-getFieldAsString key fields =
-    case lookup key fields of
-        Just (JsonString s) -> Just s
+-- | Extract string from JSON value
+extractString :: JsonVal -> Maybe String
+extractString (JsonStr s) = Just s
+extractString _ = Nothing
+
+-- | Extract document body from JSON
+extractBody :: JsonVal -> Maybe [Content]
+extractBody (JsonArr elements) = mapM makeContent elements
+  where
+    makeContent :: JsonVal -> Maybe Content
+    makeContent (JsonStr s) = Just (Paragraph [PlainText s])
+    makeContent (JsonObj o) = extractStructuredContent o
+    makeContent _ = Nothing
+extractBody _ = Nothing
+
+-- | Check if object has a code block
+hasCodeBlock :: JsonObj -> Bool
+hasCodeBlock obj =
+    case lookup "codeblock" obj of
+        Just (JsonStr _) -> True
+        _ -> False
+
+-- | Check if object has a list
+hasList :: JsonObj -> Bool
+hasList obj =
+    case lookup "list" obj of
+        Just (JsonArr _) -> True
+        _ -> False
+
+-- | Check if object has a titled section
+hasTitledSection :: JsonObj -> Bool
+hasTitledSection obj =
+    case (lookup "section" obj, lookup "content" obj) of
+        (Just (JsonStr _), Just (JsonArr _)) -> True
+        _ -> False
+
+-- | Check if object has an untitled section
+hasUntitledSection :: JsonObj -> Bool
+hasUntitledSection obj =
+    case lookup "section" obj of
+        Just (JsonArr _) -> True
+        _ -> False
+
+-- | Check if object has a paragraph
+hasParagraph :: JsonObj -> Bool
+hasParagraph obj =
+    case lookup "paragraph" obj of
+        Just (JsonArr _) -> True
+        _ -> False
+
+-- | Convert JSON object to structured content
+extractStructuredContent :: JsonObj -> Maybe Content
+extractStructuredContent obj
+    | hasCodeBlock obj = extractCodeBlock obj
+    | hasList obj = extractList obj
+    | hasTitledSection obj = extractTitledSection obj
+    | hasUntitledSection obj = extractUntitledSection obj
+    | hasParagraph obj = extractParagraph obj
+    | otherwise = Nothing
+
+-- | Extract a code block from JSON
+extractCodeBlock :: JsonObj -> Maybe Content
+extractCodeBlock obj =
+    case lookup "codeblock" obj of
+        Just (JsonStr code) -> Just (CodeBlock code)
         _ -> Nothing
 
--- | Build Content list from a JSON value
-buildBodyFromJson :: JsonValue -> Maybe [Content]
-buildBodyFromJson (JsonArray elems) = mapM convertContent elems
-  where
-    convertContent :: JsonValue -> Maybe Content
-    convertContent (JsonString s) = Just (Paragraph [PlainText s])
-    convertContent (JsonObject o) = buildStructuredContent o
-    convertContent _ = Nothing
-buildBodyFromJson _ = Nothing
+-- | Extract a list from JSON
+extractList :: JsonObj -> Maybe Content
+extractList obj =
+    case lookup "list" obj of
+        Just (JsonArr items) -> do
+            listItems <- mapM makeListItem items
+            return (List listItems)
+        _ -> Nothing
 
--- | Build a structured content element from a JSON object
-buildStructuredContent :: JsonObject -> Maybe Content
-buildStructuredContent fields
-    | hasKeyWithString "codeblock" fields =
-        Just (CodeBlock (getStringValue "codeblock" fields))
-    | hasKeyWithArray "list" fields = buildList fields
-    | hasKeyWithString "section" fields && hasKeyWithArray "content" fields =
-        buildSectionWithTitle fields
-    | hasKeyWithArray "section" fields = buildSectionWithoutTitle fields
-    | hasKeyWithArray "paragraph" fields = buildParagraph fields
-    | otherwise = Nothing
+-- | Extract a titled section from JSON
+extractTitledSection :: JsonObj -> Maybe Content
+extractTitledSection obj =
+    case (lookup "section" obj, lookup "content" obj) of
+        (Just (JsonStr title'), Just (JsonArr contents)) -> do
+            sectionContents <- mapM makeSecContent contents
+            return (Section (Just title') sectionContents)
+        _ -> Nothing
 
--- | Check if object has a key with string value
-hasKeyWithString :: String -> JsonObject -> Bool
-hasKeyWithString key fields =
-    case lookup key fields of
-        Just (JsonString _) -> True
-        _ -> False
+-- | Extract an untitled section from JSON
+extractUntitledSection :: JsonObj -> Maybe Content
+extractUntitledSection obj =
+    case lookup "section" obj of
+        Just (JsonArr contents) -> do
+            sectionContents <- mapM makeSecContent contents
+            return (Section Nothing sectionContents)
+        _ -> Nothing
 
--- | Check if object has a key with array value
-hasKeyWithArray :: String -> JsonObject -> Bool
-hasKeyWithArray key fields =
-    case lookup key fields of
-        Just (JsonArray _) -> True
-        _ -> False
+-- | Extract a paragraph from JSON
+extractParagraph :: JsonObj -> Maybe Content
+extractParagraph obj =
+    case lookup "paragraph" obj of
+        Just (JsonArr inlines) -> do
+            paragraphContents <- mapM extractPlainText inlines
+            return (Paragraph paragraphContents)
+        _ -> Nothing
 
--- | Get string value from object
-getStringValue :: String -> JsonObject -> String
-getStringValue key fields =
-    case lookup key fields of
-        Just (JsonString s) -> s
-        _ -> ""
+-- | Convert JSON to section content
+makeSecContent :: JsonVal -> Maybe Content
+makeSecContent (JsonStr s) = Just (Paragraph [PlainText s])
+makeSecContent (JsonObj o) = extractStructuredContent o
+makeSecContent _ = Nothing
 
--- | Get array value from object
-getArrayValue :: String -> JsonObject -> [JsonValue]
-getArrayValue key fields =
-    case lookup key fields of
-        Just (JsonArray arr) -> arr
-        _ -> []
+-- | Extract plain text from JSON
+extractPlainText :: JsonVal -> Maybe Inline
+extractPlainText (JsonStr s) = Just (PlainText s)
+extractPlainText _ = Nothing
 
--- | Build a list content
-buildList :: JsonObject -> Maybe Content
-buildList fields = do
-    let items = getArrayValue "list" fields
-    listItems <- mapM jsonListItem items
-    Just (List listItems)
+-- | Create a simple ListItem from string
+makeSimpleListItem :: String -> ListItem
+makeSimpleListItem s = ListItem [PlainText s]
 
--- | Build a section with title
-buildSectionWithTitle :: JsonObject -> Maybe Content
-buildSectionWithTitle fields = do
-    let title' = getStringValue "section" fields
-    let contentArray = getArrayValue "content" fields
-    sectionContents <- mapM convertSectionContent contentArray
-    Just (Section (Just title') sectionContents)
+-- | Extract list item content
+extractItemContent :: JsonVal -> Maybe Inline
+extractItemContent (JsonStr s) = Just (PlainText s)
+extractItemContent _ = Nothing
 
--- | Build a section without title
-buildSectionWithoutTitle :: JsonObject -> Maybe Content
-buildSectionWithoutTitle fields = do
-    let contentArray = getArrayValue "section" fields
-    sectionContents <- mapM convertSectionContent contentArray
-    Just (Section Nothing sectionContents)
+-- | Create a ListItem from JSON with content
+makeListItemWithContent :: [JsonVal] -> Maybe ListItem
+makeListItemWithContent inlines = do
+    content <- mapM extractItemContent inlines
+    return (ListItem content)
 
--- | Build a paragraph content
-buildParagraph :: JsonObject -> Maybe Content
-buildParagraph fields = do
-    let inlines = getArrayValue "paragraph" fields
-    paragraphContent <- mapM convertInline inlines
-    Just (Paragraph paragraphContent)
-
--- | Convert section content
-convertSectionContent :: JsonValue -> Maybe Content
-convertSectionContent (JsonString s) = Just (Paragraph [PlainText s])
-convertSectionContent (JsonObject o) = buildStructuredContent o
-convertSectionContent _ = Nothing
-
--- | Convert inline content
-convertInline :: JsonValue -> Maybe Inline
-convertInline (JsonString s) = Just (PlainText s)
-convertInline _ = Nothing
-
--- | Convert a JSON value to a list item
-jsonListItem :: JsonValue -> Maybe ListItem
-jsonListItem (JsonString s) = Just (ListItem [PlainText s])
-jsonListItem (JsonObject o)
-    | hasKeyWithArray "content" o = do
-        let contentArray = getArrayValue "content" o
-        content <- mapM convertItemContent contentArray
-        Just (ListItem content)
-    | otherwise = Nothing
-  where
-    convertItemContent :: JsonValue -> Maybe Inline
-    convertItemContent (JsonString s) = Just (PlainText s)
-    convertItemContent _ = Nothing
-jsonListItem _ = Nothing
+-- | Create a ListItem from JSON
+makeListItem :: JsonVal -> Maybe ListItem
+makeListItem (JsonStr s) = Just (makeSimpleListItem s)
+makeListItem (JsonObj o) =
+    case lookup "content" o of
+        Just (JsonArr inlines) -> makeListItemWithContent inlines
+        _ -> Nothing
+makeListItem _ = Nothing
