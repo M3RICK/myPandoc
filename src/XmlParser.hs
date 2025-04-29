@@ -11,40 +11,39 @@ module XmlParser
 
 import ParsingLibrary
 import Document
-import Data.Char (isSpace)
 
 -- | Parse a complete XML document
 parseXml :: Parser Document
-parseXml = do
-    skipWhitespace
-    _ <- stringP "<document>"
-    skipWhitespace
-    header <- parseHeader
-    skipWhitespace
-    _ <- stringP "<body>"
-    skipWhitespace
-    content <- parseContents
-    skipWhitespace
-    _ <- stringP "</body>"
-    skipWhitespace
-    _ <- stringP "</document>"
-    skipWhitespace
-    return (Document header content)
+parseXml = 
+    skipWhitespace *>
+    stringP "<document>" *>
+    skipWhitespace *>
+    parseHeader >>= \header' ->
+    skipWhitespace *>
+    stringP "<body>" *>
+    skipWhitespace *>
+    parseContents >>= \content' ->
+    skipWhitespace *>
+    stringP "</body>" *>
+    skipWhitespace *>
+    stringP "</document>" *>
+    skipWhitespace *>
+    return (Document header' content')
 
 -- | Parse XML header section
 parseHeader :: Parser Header
-parseHeader = do
-    _ <- stringP "<header"
-    skipWhitespace
-    attrs <- parseAttributes
-    skipWhitespace
-    _ <- stringP ">"
-    skipWhitespace
-    _ <- stringP "</header>"
-    let title = findAttr "title" attrs ""
-    let author = lookup "author" attrs
-    let date = lookup "date" attrs
-    return (Header title author date)
+parseHeader = 
+    stringP "<header" *>
+    skipWhitespace *>
+    parseAttributes >>= \attrs ->
+    skipWhitespace *>
+    stringP ">" *>
+    skipWhitespace *>
+    stringP "</header>" *>
+    let title' = findAttr "title" attrs ""
+        author' = lookup "author" attrs
+        date' = lookup "date" attrs
+    in return (Header title' author' date')
 
 -- | Parse attributes in an XML tag
 parseAttributes :: Parser [(String, String)]
@@ -52,15 +51,15 @@ parseAttributes = manyP parseAttribute
 
 -- | Parse a single attribute (name="value")
 parseAttribute :: Parser (String, String)
-parseAttribute = do
-    skipWhitespace
-    name <- parseAttributeName
-    skipWhitespace
-    _ <- char '='
-    skipWhitespace
-    _ <- char '"'
-    value <- parseAttributeValue
-    _ <- char '"'
+parseAttribute = 
+    skipWhitespace *>
+    parseAttributeName >>= \name ->
+    skipWhitespace *>
+    char '=' *>
+    skipWhitespace *>
+    char '"' *>
+    parseAttributeValue >>= \value ->
+    char '"' *>
     return (name, value)
 
 -- | Parse attribute name
@@ -68,9 +67,9 @@ parseAttributeName :: Parser String
 parseAttributeName = someP (satisfy isAttributeNameChar)
   where
     isAttributeNameChar c = (c >= 'a' && c <= 'z') || 
-                           (c >= 'A' && c <= 'Z') || 
-                           (c >= '0' && c <= '9') || 
-                           c == '_' || c == '-'
+                          (c >= 'A' && c <= 'Z') || 
+                          (c >= '0' && c <= '9') || 
+                          c == '_' || c == '-'
 
 -- | Parse attribute value (characters between quotes)
 parseAttributeValue :: Parser String
@@ -93,35 +92,35 @@ parseContent = parseParagraph `orElse` parseSection `orElse` parseCodeBlock `orE
 
 -- | Parse a paragraph element
 parseParagraph :: Parser Content
-parseParagraph = do
-    skipWhitespace
-    _ <- stringP "<paragraph>"
-    inlines <- parseInlines
-    _ <- stringP "</paragraph>"
+parseParagraph = 
+    skipWhitespace *>
+    stringP "<paragraph>" *>
+    parseInlines >>= \inlines ->
+    stringP "</paragraph>" *>
     return (Paragraph inlines)
 
 -- | Parse a section element
 parseSection :: Parser Content
-parseSection = do
-    skipWhitespace
-    _ <- stringP "<section"
-    skipWhitespace
-    attrs <- parseAttributes
-    skipWhitespace
-    _ <- stringP ">"
-    skipWhitespace
-    contents <- parseContents
-    skipWhitespace
-    _ <- stringP "</section>"
+parseSection = 
+    skipWhitespace *>
+    stringP "<section" *>
+    skipWhitespace *>
+    parseAttributes >>= \attrs ->
+    skipWhitespace *>
+    stringP ">" *>
+    skipWhitespace *>
+    parseContents >>= \contents ->
+    skipWhitespace *>
+    stringP "</section>" *>
     return (Section (lookup "title" attrs) contents)
 
 -- | Parse a code block element
 parseCodeBlock :: Parser Content
-parseCodeBlock = do
-    skipWhitespace
-    _ <- stringP "<codeblock>"
-    code <- parseCodeContent
-    _ <- stringP "</codeblock>"
+parseCodeBlock = 
+    skipWhitespace *>
+    stringP "<codeblock>" *>
+    parseCodeContent >>= \code ->
+    stringP "</codeblock>" *>
     return (CodeBlock code)
 
 -- | Parse code content (all text until closing tag)
@@ -134,22 +133,22 @@ parseCodeContent = Parser $ \input ->
 
 -- | Parse a list element
 parseList :: Parser Content
-parseList = do
-    skipWhitespace
-    _ <- stringP "<list>"
-    skipWhitespace
-    items <- manyP parseListItem
-    skipWhitespace
-    _ <- stringP "</list>"
+parseList = 
+    skipWhitespace *>
+    stringP "<list>" *>
+    skipWhitespace *>
+    manyP parseListItem >>= \items ->
+    skipWhitespace *>
+    stringP "</list>" *>
     return (List items)
 
 -- | Parse a list item
 parseListItem :: Parser ListItem
-parseListItem = do
-    skipWhitespace
-    _ <- stringP "<item>"
-    inlines <- parseInlines
-    _ <- stringP "</item>"
+parseListItem = 
+    skipWhitespace *>
+    stringP "<item>" *>
+    parseInlines >>= \inlines ->
+    stringP "</item>" *>
     return (ListItem inlines)
 
 -- | Parse inline elements
@@ -159,7 +158,7 @@ parseInlines = manyP parseInline
 -- | Parse a single inline element
 parseInline :: Parser Inline
 parseInline = parsePlainText `orElse` parseBold `orElse` parseItalic `orElse` 
-              parseCode `orElse` parseLink `orElse` parseImage
+            parseCode `orElse` parseLink `orElse` parseImage
 
 -- | Parse plain text
 parsePlainText :: Parser Inline
@@ -172,49 +171,49 @@ parsePlainText = Parser $ \input ->
 
 -- | Parse bold text
 parseBold :: Parser Inline
-parseBold = do
-    _ <- stringP "<bold>"
-    inlines <- parseInlines
-    _ <- stringP "</bold>"
+parseBold = 
+    stringP "<bold>" *>
+    parseInlines >>= \inlines ->
+    stringP "</bold>" *>
     return (Bold inlines)
 
 -- | Parse italic text
 parseItalic :: Parser Inline
-parseItalic = do
-    _ <- stringP "<italic>"
-    inlines <- parseInlines
-    _ <- stringP "</italic>"
+parseItalic = 
+    stringP "<italic>" *>
+    parseInlines >>= \inlines ->
+    stringP "</italic>" *>
     return (Italic inlines)
 
 -- | Parse code inline
 parseCode :: Parser Inline
-parseCode = do
-    _ <- stringP "<code>"
-    code <- manyP (satisfy (/= '<'))
-    _ <- stringP "</code>"
+parseCode = 
+    stringP "<code>" *>
+    manyP (satisfy (/= '<')) >>= \code ->
+    stringP "</code>" *>
     return (Code code)
 
 -- | Parse link
 parseLink :: Parser Inline
-parseLink = do
-    _ <- stringP "<link"
-    skipWhitespace
-    attrs <- parseAttributes
-    skipWhitespace
-    _ <- stringP ">"
-    text <- manyP (satisfy (/= '<'))
-    _ <- stringP "</link>"
+parseLink = 
+    stringP "<link" *>
+    skipWhitespace *>
+    parseAttributes >>= \attrs ->
+    skipWhitespace *>
+    stringP ">" *>
+    manyP (satisfy (/= '<')) >>= \text ->
+    stringP "</link>" *>
     let url = findAttr "href" attrs ""
-    return (Link text url)
+    in return (Link text url)
 
 -- | Parse image
 parseImage :: Parser Inline
-parseImage = do
-    _ <- stringP "<image"
-    skipWhitespace
-    attrs <- parseAttributes
-    skipWhitespace
-    _ <- stringP "></image>"
+parseImage = 
+    stringP "<image" *>
+    skipWhitespace *>
+    parseAttributes >>= \attrs ->
+    skipWhitespace *>
+    stringP "></image>" *>
     let alt = findAttr "alt" attrs ""
-    let src = findAttr "src" attrs ""
-    return (Image alt src)
+        src = findAttr "src" attrs ""
+    in return (Image alt src)

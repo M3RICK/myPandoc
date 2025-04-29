@@ -11,7 +11,6 @@ module JsonParser
 
 import ParsingLibrary
 import Document
-import Data.Char (isSpace)
 
 -- | Our custom data types for JSON parsing
 type JsonObj = [(String, JsonVal)]
@@ -27,70 +26,67 @@ data JsonVal
 
 -- | Main entry point - Parse a full JSON document
 parseJson :: Parser Document
-parseJson = do
-    skipWhitespace
-    obj <- parseJsonObject
-    skipWhitespace
+parseJson = 
+    skipWhitespace *>
+    parseJsonObject >>= \obj ->
+    skipWhitespace *>
     case jsonToDocument obj of
         Just doc -> return doc
         Nothing -> emptyP
 
 -- | Parse a JSON object {key: value, ...}
 parseJsonObject :: Parser JsonObj
-parseJsonObject = do
-    skipWhitespace
-    _ <- char '{'
-    skipWhitespace
-    result <- parseJsonPairs
-    skipWhitespace
-    _ <- char '}'
+parseJsonObject = 
+    skipWhitespace *>
+    char '{' *>
+    skipWhitespace *>
+    parseJsonPairs >>= \result ->
+    skipWhitespace *>
+    char '}' *>
     return result
 
 -- | Parse key-value pairs in a JSON object
 parseJsonPairs :: Parser JsonObj
-parseJsonPairs = do
-    skipWhitespace
-    -- Check if we're looking at an empty object
-    firstChar <- currentInput
+parseJsonPairs = 
+    skipWhitespace *>
+    currentInput >>= \firstChar ->
     if take 1 firstChar == "}"
         then return []
-        else do
+        else 
             -- Parse first pair
-            pair <- parseJsonPair
-            skipWhitespace
-            -- Check if there are more pairs
-            nextChar <- currentInput
+            parseJsonPair >>= \pair ->
+            skipWhitespace *>
+            currentInput >>= \nextChar ->
             if take 1 nextChar == ","
-                then do
-                    _ <- char ','
-                    rest <- parseJsonPairs
-                    return (pair : rest)
+                then char ',' *>
+                     parseJsonPairs >>= \rest ->
+                     return (pair : rest)
                 else return [pair]
 
 -- | Parse a single key-value pair
 parseJsonPair :: Parser (String, JsonVal)
-parseJsonPair = do
-    skipWhitespace
-    key <- parseJsonString
-    skipWhitespace
-    _ <- char ':'
-    skipWhitespace
-    value <- parseJsonValue
+parseJsonPair = 
+    skipWhitespace *>
+    parseJsonString >>= \key ->
+    skipWhitespace *>
+    char ':' *>
+    skipWhitespace *>
+    parseJsonValue >>= \value ->
     return (key, value)
 
 -- | Parse any JSON value
 parseJsonValue :: Parser JsonVal
-parseJsonValue = do
-    skipWhitespace
-    firstChar <- currentInput
+parseJsonValue = 
+    skipWhitespace *>
+    currentInput >>= \firstChar ->
     case take 1 firstChar of
-        "\"" -> JsonStr <$> parseJsonString
-        "[" -> JsonArr <$> parseJsonArray
-        "{" -> JsonObj <$> parseJsonObject
+        "\"" -> parseJsonString >>= \s -> return (JsonStr s)
+        "[" -> parseJsonArray >>= \arr -> return (JsonArr arr)
+        "{" -> parseJsonObject >>= \obj -> return (JsonObj obj)
         "t" -> parseJsonTrue
         "f" -> parseJsonFalse
         "n" -> parseJsonNull
-        _ -> if isNumberStart (head firstChar)
+        _ -> if not (null firstChar) && isNumberStart (head firstChar)
              then parseJsonNumber
              else emptyP
   where
@@ -98,10 +94,10 @@ parseJsonValue = do
 
 -- | Parse a JSON string (with proper escaping)
 parseJsonString :: Parser String
-parseJsonString = do
-    _ <- char '"'
-    content <- parseJsonStringContent
-    _ <- char '"'
+parseJsonString = 
+    char '"' *>
+    parseJsonStringContent >>= \content ->
+    char '"' *>
     return content
 
 -- | Parse the content of a JSON string
@@ -109,7 +105,7 @@ parseJsonStringContent :: Parser String
 parseJsonStringContent = Parser $ \input ->
     parseStringHelper "" input
   where
-    parseStringHelper acc "" = Nothing
+    parseStringHelper _ "" = Nothing
     parseStringHelper acc ('"':rest) = Just (reverse acc, '"':rest)
     parseStringHelper acc ('\\':'"':rest) = parseStringHelper ('"':acc) rest
     parseStringHelper acc ('\\':'\\':rest) = parseStringHelper ('\\':acc) rest
@@ -120,51 +116,48 @@ parseJsonStringContent = Parser $ \input ->
 
 -- | Parse a JSON array [value, value, ...]
 parseJsonArray :: Parser [JsonVal]
-parseJsonArray = do
-    _ <- char '['
-    skipWhitespace
-    result <- parseJsonArrayItems
-    skipWhitespace
-    _ <- char ']'
+parseJsonArray = 
+    char '[' *>
+    skipWhitespace *>
+    parseJsonArrayItems >>= \result ->
+    skipWhitespace *>
+    char ']' *>
     return result
 
 -- | Parse items in a JSON array
 parseJsonArrayItems :: Parser [JsonVal]
-parseJsonArrayItems = do
-    skipWhitespace
-    -- Check if we're looking at an empty array
-    firstChar <- currentInput
+parseJsonArrayItems = 
+    skipWhitespace *>
+    currentInput >>= \firstChar ->
     if take 1 firstChar == "]"
         then return []
-        else do
+        else 
             -- Parse first item
-            item <- parseJsonValue
-            skipWhitespace
-            -- Check if there are more items
-            nextChar <- currentInput
+            parseJsonValue >>= \item ->
+            skipWhitespace *>
+            currentInput >>= \nextChar ->
             if take 1 nextChar == ","
-                then do
-                    _ <- char ','
-                    rest <- parseJsonArrayItems
-                    return (item : rest)
+                then char ',' *>
+                     parseJsonArrayItems >>= \rest ->
+                     return (item : rest)
                 else return [item]
 
 -- | Parse JSON true value
 parseJsonTrue :: Parser JsonVal
-parseJsonTrue = do
-    _ <- stringP "true"
+parseJsonTrue = 
+    stringP "true" *>
     return (JsonBool True)
 
 -- | Parse JSON false value
 parseJsonFalse :: Parser JsonVal
-parseJsonFalse = do
-    _ <- stringP "false"
+parseJsonFalse = 
+    stringP "false" *>
     return (JsonBool False)
 
 -- | Parse JSON null value
 parseJsonNull :: Parser JsonVal
-parseJsonNull = do
-    _ <- stringP "null"
+parseJsonNull = 
+    stringP "null" *>
     return JsonNull
 
 -- | Parse a JSON number
@@ -180,9 +173,9 @@ parseJsonNumber = Parser $ \input ->
 -- | Convert parsed JSON to Document
 jsonToDocument :: JsonObj -> Maybe Document
 jsonToDocument obj = do
-    header <- extractHeader obj
-    body <- extractBody obj
-    return (Document header body)
+    header' <- extractHeader obj
+    body' <- extractBody obj
+    return (Document header' body')
 
 -- | Extract header from JSON object
 extractHeader :: JsonObj -> Maybe Header
@@ -190,10 +183,10 @@ extractHeader obj = do
     headerVal <- lookup "header" obj
     case headerVal of
         JsonObj fields -> do
-            title <- extractStringField "title" fields
-            let author = extractOptionalStringField "author" fields
-            let date = extractOptionalStringField "date" fields
-            return (Header title author date)
+            title' <- extractStringField "title" fields
+            let author' = extractOptionalStringField "author" fields
+            let date' = extractOptionalStringField "date" fields
+            return (Header title' author' date')
         _ -> Nothing
 
 -- | Extract body from JSON object
@@ -246,14 +239,14 @@ extractSection obj = do
     sectionVal <- lookup "section" obj
     case sectionVal of
         JsonObj secObj -> do
-            let title = case lookup "title" secObj of
-                          Just (JsonStr t) -> Just t
-                          _ -> Nothing
+            let title' = case lookup "title" secObj of
+                         Just (JsonStr t) -> Just t
+                         _ -> Nothing
             contentsVal <- lookup "contents" secObj
             case contentsVal of
                 JsonArr elements -> do
-                    contents <- mapM extractContent elements
-                    return (Section title contents)
+                    contents' <- mapM extractContent elements
+                    return (Section title' contents')
                 _ -> Nothing
         _ -> Nothing
 
@@ -281,8 +274,8 @@ extractListItem (JsonObj obj) = do
     itemVal <- lookup "item" obj
     case itemVal of
         JsonArr inlines -> do
-            content <- mapM extractInline inlines
-            return (ListItem content)
+            content' <- mapM extractInline inlines
+            return (ListItem content')
         _ -> Nothing
 extractListItem _ = Nothing
 
@@ -304,8 +297,8 @@ extractBold obj = do
     boldVal <- lookup "bold" obj
     case boldVal of
         JsonArr inlines -> do
-            content <- mapM extractInline inlines
-            return (Bold content)
+            content' <- mapM extractInline inlines
+            return (Bold content')
         _ -> Nothing
 
 -- | Extract italic text from JSON object
@@ -314,8 +307,8 @@ extractItalic obj = do
     italicVal <- lookup "italic" obj
     case italicVal of
         JsonArr inlines -> do
-            content <- mapM extractInline inlines
-            return (Italic content)
+            content' <- mapM extractInline inlines
+            return (Italic content')
         _ -> Nothing
 
 -- | Extract code from JSON object

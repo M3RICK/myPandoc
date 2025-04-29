@@ -5,8 +5,6 @@
 -- Its parsin time
 -}
 
---  A NOTER QUE P A LA FIN DE CHAQUE MERDE C EST POUR PARSER par exemple ma biche manyP, many PARSEEEEEEEEEEEEEER
-
 module ParsingLibrary
   ( ParseResult
   , Parser(..)

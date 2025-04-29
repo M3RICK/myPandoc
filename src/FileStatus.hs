@@ -11,7 +11,7 @@ module FileStatus
 
 import System.IO (openFile, IOMode(ReadMode), hClose, hFileSize)
 import System.Exit (exitWith, ExitCode(ExitFailure))
-import System.IO.Error (catchIOError, isDoesNotExistError)
+import System.IO.Error (isDoesNotExistError)
 import Control.Exception (try)
 import Control.Monad (unless)
 import Data.Char (toLower, isSpace)
@@ -47,14 +47,11 @@ isValidContent :: String -> FilePath -> IO Bool
 isValidContent fmt filePath = do
   content <- readFile filePath
   let trimmedContent = trim content
-  let result = case map toLower fmt of
-        "xml" -> isPrefixOf "<document>" trimmedContent
-        "json" -> isPrefixOf "{" trimmedContent
-        "markdown" -> isPrefixOf "---" trimmedContent
-        _ -> False
-  putStrLn $ "DEBUG: Checking if file content matches format " ++ fmt ++ ": " ++ show result
-  putStrLn $ "DEBUG: First 20 chars: " ++ take 20 trimmedContent
-  return result
+  return $ case map toLower fmt of
+    "xml" -> isPrefixOf "<document>" trimmedContent
+    "json" -> isPrefixOf "{" trimmedContent
+    "markdown" -> isPrefixOf "---" trimmedContent
+    _ -> False
   where
     -- Helper function to check if a string is a prefix of another
     isPrefixOf :: String -> String -> Bool
