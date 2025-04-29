@@ -53,6 +53,10 @@ processArgs args = do
             doc <- parseInputFile convertInfo fmt
             return (fmt, doc)
     
+    -- Debug print document structure
+    putStrLn $ "DEBUG: Document header: " ++ show (header document)
+    putStrLn $ "DEBUG: Document content count: " ++ show (length (content document))
+    
     -- Convert to output format
     putStrLn $ "INFO: Converting from " ++ actualFormat ++ " to " ++ outputFormat'
     let outputContent = convertDocument document outputFormat'
@@ -72,6 +76,7 @@ parseInputFile :: ConvertInfo -> String -> IO Document
 parseInputFile convertInfo fmt = do
     content <- readFile (inputFile convertInfo)
     putStrLn $ "INFO: Parsing input file: " ++ inputFile convertInfo
+    putStrLn $ "DEBUG: First 50 chars of file: " ++ take 50 content
     
     case fmt of
         "xml" -> do
@@ -79,22 +84,28 @@ parseInputFile convertInfo fmt = do
             let result = run parseXml content
             if isNothing result
                 then do
-                    hPutStrLn stderr $ "DEBUG: XML content sample:\n" ++ take 100 content
+                    hPutStrLn stderr $ "DEBUG: XML parsing failed"
+                    hPutStrLn stderr $ "DEBUG: Content sample:\n" ++ take 100 content
                     exitWithError "Failed to parse XML input"
                 else do
                     putStrLn "INFO: XML parsing successful"
-                    let Just (doc, _) = result
+                    let Just (doc, rest) = result
+                    when (not (null rest)) $
+                        putStrLn $ "WARN: Parser did not consume all input. Remaining: " ++ take 50 rest
                     return doc
         "json" -> do
             putStrLn "DEBUG: Parsing JSON content"
             let result = run parseJson content
             if isNothing result
                 then do
-                    hPutStrLn stderr $ "DEBUG: JSON content sample:\n" ++ take 100 content
+                    hPutStrLn stderr $ "DEBUG: JSON parsing failed"
+                    hPutStrLn stderr $ "DEBUG: Content sample:\n" ++ take 100 content
                     exitWithError "Failed to parse JSON input"
                 else do
                     putStrLn "INFO: JSON parsing successful"
-                    let Just (doc, _) = result
+                    let Just (doc, rest) = result
+                    when (not (null rest)) $
+                        putStrLn $ "WARN: Parser did not consume all input. Remaining: " ++ take 50 rest
                     return doc
         _ -> exitWithError ("Unsupported input format: " ++ fmt)
 

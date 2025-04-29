@@ -14,7 +14,8 @@ import System.Exit (exitWith, ExitCode(ExitFailure))
 import System.IO.Error (catchIOError, isDoesNotExistError)
 import Control.Exception (try)
 import Control.Monad (unless)
-import Data.Char (toLower)
+import Data.Char (toLower, isSpace)
+import Data.List (dropWhileEnd)
 
 -- | Main func, checks if file exists, accessible, empty...
 validateFile :: String -> FilePath -> IO ()
@@ -30,35 +31,39 @@ validateFile fmt filePath =
 
 -- | bruteforce way to get format
 detectFormat :: FilePath -> IO String
-detectFormat filePath =
-  readFile filePath >>= \content ->
-    case content of
+detectFormat filePath = do
+    content <- readFile filePath
+    let trimmedContent = trim content
+    case trimmedContent of
       ('<':_) -> return "xml"
       ('{':_) -> return "json"
       ('-':'-':'-':_) -> return "markdown"
       _ -> usageError $ "Unable to detect input format for file: " ++ filePath
+  where
+    trim = dropWhileEnd isSpace . dropWhile isSpace
 
 -- | checks verry poorly for correct format structure
--- | checks verry poorly for correct format structure
 isValidContent :: String -> FilePath -> IO Bool
-isValidContent fmt filePath =
-  readFile filePath >>= \content ->
-    let result = case map toLower fmt of
-          "xml" -> isPrefixOf "<document>" content
-          "json" -> isPrefixOf "{" content
-          "markdown" -> isPrefixOf "---" content
-          _ -> False
-    in do
-      putStrLn $ "DEBUG: Checking if file content matches format " ++ fmt ++ ": " ++ show result
-      putStrLn $ "DEBUG: First 20 chars: " ++ take 20 content
-      return result
+isValidContent fmt filePath = do
+  content <- readFile filePath
+  let trimmedContent = trim content
+  let result = case map toLower fmt of
+        "xml" -> isPrefixOf "<document>" trimmedContent
+        "json" -> isPrefixOf "{" trimmedContent
+        "markdown" -> isPrefixOf "---" trimmedContent
+        _ -> False
+  putStrLn $ "DEBUG: Checking if file content matches format " ++ fmt ++ ": " ++ show result
+  putStrLn $ "DEBUG: First 20 chars: " ++ take 20 trimmedContent
+  return result
   where
     -- Helper function to check if a string is a prefix of another
     isPrefixOf :: String -> String -> Bool
     isPrefixOf [] _ = True
     isPrefixOf _ [] = False
     isPrefixOf (p:ps) (s:ss) = p == s && isPrefixOf ps ss
-
+    
+    -- Trim whitespace from start and end
+    trim = dropWhileEnd isSpace . dropWhile isSpace
 
 -- | Self Explanatory
 doesFileExist' :: FilePath -> IO Bool
