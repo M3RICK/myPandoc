@@ -49,12 +49,44 @@ module ParsingLibrary
   ) where
 
 import Data.Char (isDigit, isAlpha, isAlphaNum, isSpace)
+import Control.Applicative (Alternative(..))
+import Control.Monad (MonadPlus(..))
 
 -- | Type de retour d'un parseur : soit une valeur avec le reste de l'entrée, soit échec
 type ParseResult a = Maybe (a, String)
 
 -- | Type principal : un parseur est une fonction sur une String
 newtype Parser a = Parser { parse::String -> ParseResult a }
+
+-- | Functor instance
+instance Functor Parser where
+  fmap f parser = Parser $ \input -> case run parser input of
+    Nothing -> Nothing
+    Just (a, rest) -> Just (f a, rest)
+
+-- | Applicative instance
+instance Applicative Parser where
+  pure = pureP
+  pf <*> px = Parser $ \input -> case run pf input of
+    Nothing -> Nothing
+    Just (f, rest) -> run (fmap f px) rest
+
+-- | Monad instance
+instance Monad Parser where
+  return = pure
+  p >>= f = Parser $ \input -> case run p input of
+    Nothing -> Nothing
+    Just (a, rest) -> run (f a) rest
+
+-- | Alternative instance
+instance Alternative Parser where
+  empty = emptyP
+  p1 <|> p2 = orElse p1 p2
+
+-- | MonadPlus instance
+instance MonadPlus Parser where
+  mzero = empty
+  mplus = (<|>)
 
 -- | Lance un parseur
 run::Parser a -> String -> ParseResult a
@@ -164,7 +196,7 @@ letter = satisfy isAlpha
 alphaNum::Parser Char
 alphaNum = satisfy isAlphaNum
 
--- | Caractère d’espace
+-- | Caractère d'espace
 space::Parser Char
 space = satisfy isSpace
 
@@ -176,11 +208,11 @@ skipSpaces = manyP space
 token::Parser a -> Parser a
 token p = map2P const p skipSpaces
 
--- | Accepte un caractère d’une chaîne
+-- | Accepte un caractère d'une chaîne
 oneOfStr::String -> Parser Char
 oneOfStr = oneOf
 
--- | Rejette un caractère d’une chaîne
+-- | Rejette un caractère d'une chaîne
 noneOfStr::String -> Parser Char
 noneOfStr = noneOf
 
@@ -196,7 +228,7 @@ skipWhitespace = manyP (oneOf " \t\n\r")
 word::Parser String
 word = map2P (:) letter (manyP alphaNum)
 
--- | Mot-clé exact, non suivi d’un mot
+-- | Mot-clé exact, non suivi d'un mot
 exactWord::String -> Parser String
 exactWord kw = thenP (stringP kw) $ \res rest ->
   case rest of

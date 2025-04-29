@@ -8,7 +8,7 @@
 module Main (main) where
 
 import System.Environment (getArgs)
-import System.IO (writeFile)
+import System.IO (writeFile, hPutStrLn, stderr)
 import System.Exit (exitWith, ExitCode(ExitFailure))
 import ArgsParser (parseArgs, ConvertInfo(..))
 import Document (Document(..), Header(..), Content(..), Inline(..))
@@ -19,6 +19,8 @@ import XmlOut (documentToXml)
 import JsonOut (documentToJson)
 import MarkdownOut (documentToMarkdown)
 import ParsingLibrary (run)
+import Data.Maybe (isNothing)
+import Control.Monad (when)
 
 -- | Main entry point of the program
 main :: IO ()
@@ -30,46 +32,71 @@ main = do
 
 -- | Process command line arguments
 processArgs :: [String] -> IO ()
-processArgs args = 
-    parseArgs args >>= 
-    \convertInfo ->
-        let inputFile' = inputFile convertInfo
-            inputFormat' = inputFormat convertInfo
-            outputFormat' = outputFormat convertInfo
-            outputFile' = outputFile convertInfo
-        in
-        -- Validate and detect format
-        (case inputFormat' of
-            Nothing -> 
-                detectFormat inputFile' >>= 
-                \detectedFormat -> validateFile detectedFormat inputFile' *>
-                parseInputFile convertInfo detectedFormat
-            Just fmt -> 
-                validateFile fmt inputFile' *>
-                parseInputFile convertInfo fmt) >>=
-        -- Convert to output format
-        \document ->
-            let outputContent = convertDocument document outputFormat' in
-            -- Write output
-            case outputFile' of
-                Just path -> writeFile path outputContent
-                Nothing -> putStrLn outputContent
+processArgs args = do
+    convertInfo <- parseArgs args
+    let inputFile' = inputFile convertInfo
+        inputFormat' = inputFormat convertInfo
+        outputFormat' = outputFormat convertInfo
+        outputFile' = outputFile convertInfo
+    
+    -- Determine and validate format
+    (actualFormat, document) <- case inputFormat' of
+        Nothing -> do
+            detectedFormat <- detectFormat inputFile'
+            putStrLn $ "INFO: Detected input format: " ++ detectedFormat
+            validateFile detectedFormat inputFile'
+            doc <- parseInputFile convertInfo detectedFormat
+            return (detectedFormat, doc)
+        Just fmt -> do
+            putStrLn $ "INFO: Using specified input format: " ++ fmt
+            validateFile fmt inputFile'
+            doc <- parseInputFile convertInfo fmt
+            return (fmt, doc)
+    
+    -- Convert to output format
+    putStrLn $ "INFO: Converting from " ++ actualFormat ++ " to " ++ outputFormat'
+    let outputContent = convertDocument document outputFormat'
+    
+    -- Write output
+    case outputFile' of
+        Just path -> do
+            putStrLn $ "INFO: Writing to output file: " ++ path
+            writeFile path outputContent
+            putStrLn $ "INFO: Conversion completed successfully"
+        Nothing -> do
+            putStrLn "INFO: Output to stdout:"
+            putStrLn outputContent
 
 -- | Parse input file based on format
 parseInputFile :: ConvertInfo -> String -> IO Document
-parseInputFile convertInfo fmt =
-    readFile (inputFile convertInfo) >>=
-    \content ->
-        case fmt of
-            "xml" -> 
-                case run parseXml content of
-                    Just (doc, _) -> return doc
-                    Nothing -> exitWithError "Failed to parse XML input"
-            "json" ->
-                case run parseJson content of
-                    Just (doc, _) -> return doc
-                    Nothing -> exitWithError "Failed to parse JSON input"
-            _ -> exitWithError ("Unsupported input format: " ++ fmt)
+parseInputFile convertInfo fmt = do
+    content <- readFile (inputFile convertInfo)
+    putStrLn $ "INFO: Parsing input file: " ++ inputFile convertInfo
+    
+    case fmt of
+        "xml" -> do
+            putStrLn "DEBUG: Parsing XML content"
+            let result = run parseXml content
+            if isNothing result
+                then do
+                    hPutStrLn stderr $ "DEBUG: XML content sample:\n" ++ take 100 content
+                    exitWithError "Failed to parse XML input"
+                else do
+                    putStrLn "INFO: XML parsing successful"
+                    let Just (doc, _) = result
+                    return doc
+        "json" -> do
+            putStrLn "DEBUG: Parsing JSON content"
+            let result = run parseJson content
+            if isNothing result
+                then do
+                    hPutStrLn stderr $ "DEBUG: JSON content sample:\n" ++ take 100 content
+                    exitWithError "Failed to parse JSON input"
+                else do
+                    putStrLn "INFO: JSON parsing successful"
+                    let Just (doc, _) = result
+                    return doc
+        _ -> exitWithError ("Unsupported input format: " ++ fmt)
 
 -- | Convert document to specified output format
 convertDocument :: Document -> String -> String
@@ -82,6 +109,6 @@ convertDocument document format =
 
 -- | Exit with error message and code 84
 exitWithError :: String -> IO a
-exitWithError msg = 
-    putStrLn ("ERROR: " ++ msg) *>
+exitWithError msg = do
+    hPutStrLn stderr ("ERROR: " ++ msg)
     exitWith (ExitFailure 84)
