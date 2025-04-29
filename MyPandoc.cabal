@@ -27,9 +27,12 @@ library
   exposed-modules:
       ArgsParser
       Document
+      FileStatus
+      JsonOut
       JsonParser
-      Lib
+      MarkdownOut
       ParsingLibrary
+      XmlOut
       XmlParser
   other-modules:
       Paths_MyPandoc

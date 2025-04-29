@@ -1,0 +1,17 @@
+<document>
+<header title="Test Document" author="Test Author" date="2024-01-01"></header>
+<body>
+<paragraph>This is a simple test paragraph with <bold>bold text</bold> and <italic>italic text</italic>.</paragraph>
+<section title="Introduction">
+<paragraph>This is a section with a title.</paragraph>
+<codeblock>function test() {
+  return "Hello World";
+}</codeblock>
+</section>
+<list>
+<item>First item</item>
+<item>Second item</item>
+<item>Third item with <bold>formatting</bold></item>
+</list>
+</body>
+</document>

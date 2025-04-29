@@ -1,0 +1,48 @@
+{
+    "header": {
+      "title": "Test Document",
+      "author": "Test Author",
+      "date": "2024-01-01"
+    },
+    "body": [
+      {
+        "paragraph": ["This is a simple test paragraph with ", 
+          {
+            "bold": ["bold text"]
+          }, 
+          " and ", 
+          {
+            "italic": ["italic text"]
+          }, 
+          "."
+        ]
+      },
+      {
+        "section": {
+          "title": "Introduction",
+          "contents": [
+            {
+              "paragraph": ["This is a section with a title."]
+            },
+            {
+              "codeblock": "function test() {\n  return \"Hello World\";\n}"
+            }
+          ]
+        }
+      },
+      {
+        "list": [
+          {
+            "item": ["First item"]
+          },
+          {
+            "item": ["Second item"]
+          },
+          {
+            "item": ["Third item with ", {"bold": ["formatting"]}]
+          }
+        ]
+      }
+    ]
+  }
+  

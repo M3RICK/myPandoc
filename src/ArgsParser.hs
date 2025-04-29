@@ -15,14 +15,17 @@ import System.IO (hPutStrLn, stderr)
 import Data.Char (toLower)
 import Data.List ((\\), nub)
 import Control.Monad (when, unless, (>=>))
+import FileStatus (validateFile, detectFormat) 
 
+-- | Data structure to store parsed command-line arguments
 data ConvertInfo = ConvertInfo
-    { inputFile :: FilePath
-    , outputFormat :: String
-    , outputFile :: Maybe FilePath
-    , inputFormat :: Maybe String
+    { inputFile :: FilePath          -- Path to the input file
+    , outputFormat :: String         -- Output format (xml, json, markdown)
+    , outputFile :: Maybe FilePath   -- Optional path to the output file
+    , inputFormat :: Maybe String    -- Optional input format (xml, json, markdown)
     } deriving (Show)
 
+-- | Display an error message and exit with code 84
 usageError :: String -> IO a
 usageError msg = hPutStrLn stderr ("ERROR: " ++ msg) *>
     hPutStrLn stderr usageMessage *>
@@ -37,15 +40,18 @@ usageError msg = hPutStrLn stderr ("ERROR: " ++ msg) *>
         , "  iformat\tinput format (xml, json, markdown)"
         ]
 
+-- | List of allowed formats
 allowedFormats :: [String]
 allowedFormats = ["xml", "json", "markdown"]
 
+-- | turns args to lowercase and checks if it corresponds to one of ours
 validateFormat :: String -> IO ()
-validateFormat fmt = 
+validateFormat fmt =
     if map toLower fmt `elem` allowedFormats
-        then pure ()
+        then return ()
         else usageError $ "Invalid format: " ++ fmt
 
+-- | Basically get's all the info you need in the right place, also takes care of handling optionnal flags and whatknot
 parseArgs :: [String] -> IO ConvertInfo
 parseArgs args =
     when (odd $ length args) (usageError "Invalid number of arguments") *>
@@ -53,43 +59,62 @@ parseArgs args =
     checkValidFlags pairs *>
     checkRequiredFlags pairs *>
     checkDuplicates pairs *>
-    (ConvertInfo
-        <$> getRequired "-i" pairs
-        <*> getRequired "-f" pairs
-        <*> getOptional "-o" pairs
-        <*> getOptional "-e" pairs)
-    >>= \ci -> validateFormat (outputFormat ci) *>
-               maybe (pure ()) validateFormat (inputFormat ci) *>
-               pure ci
+    getRequired "-i" pairs >>=
+    \inputFile ->
+    getRequired "-f" pairs >>=
+    \outputFormat ->
+    getOptional "-o" pairs >>=
+    \outputFile ->
+    getOptional "-e" pairs >>=
+    \inputFormat ->
+    maybe (detectFormat inputFile >>= \detectedFormat ->
+               validateFormat outputFormat *>
+               validateFormat detectedFormat *>
+               validateFile detectedFormat inputFile *>
+               return (ConvertInfo inputFile outputFormat outputFile (Just detectedFormat))
+          )
+          (\providedFormat ->
+               validateFormat outputFormat *>
+               validateFormat providedFormat *>
+               validateFile providedFormat inputFile *>
+               return (ConvertInfo inputFile outputFormat outputFile (Just providedFormat))
+          )
+          inputFormat
   where
+    -- | converts to pairs so that flag and data are together
     toPairs :: [String] -> [(String, String)]
     toPairs [] = []
     toPairs (f:v:rest) = (f, v) : toPairs rest
     toPairs _ = error "Internal error: invalid argument structure"
 
+    -- | Check that all flags are valid
     checkValidFlags :: [(String, String)] -> IO ()
     checkValidFlags pairs = mapM_ checkPair pairs
       where
         valid = ["-i", "-f", "-o", "-e"]
-        checkPair (f, _) | f `elem` valid = pure ()
+        checkPair (f, _) | f `elem` valid = return ()
                          | otherwise = usageError $ "Invalid flag: " ++ f
 
+    -- | Checks 4 mandatory flags
     checkRequiredFlags :: [(String, String)] -> IO ()
     checkRequiredFlags pairs =
         unless ("-i" `elem` flags) (usageError "Missing required flag: -i") *>
         unless ("-f" `elem` flags) (usageError "Missing required flag: -f")
       where flags = map fst pairs
 
+    -- | Check for dups
     checkDuplicates :: [(String, String)] -> IO ()
     checkDuplicates pairs = case duplicates of
-        [] -> pure ()
+        [] -> return ()
         ds -> usageError $ "Duplicate flags: " ++ unwords ds
       where
         flags = map fst pairs
         duplicates = flags \\ nub flags
 
+    -- | Retrieve the value for a required flag
     getRequired :: String -> [(String, String)] -> IO String
-    getRequired flag pairs = maybe (usageError $ "Missing value for " ++ flag) pure (lookup flag pairs)
+    getRequired flag pairs = maybe (usageError $ "Missing value for " ++ flag) return (lookup flag pairs)
 
+    -- | Retrieve the value for an optional flag
     getOptional :: String -> [(String, String)] -> IO (Maybe String)
-    getOptional flag pairs = pure (lookup flag pairs)
+    getOptional flag pairs = return (lookup flag pairs)

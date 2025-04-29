@@ -1,3 +1,10 @@
+{-
+-- EPITECH PROJECT, 2024
+-- Document.hs
+-- File description:
+-- can you imagine?
+-}
+
 module Document
     ( Document(..)
     , Header(..)
