@@ -38,7 +38,9 @@ contentToJson (Paragraph inlines) =
     "]\n    },\n    "
 contentToJson (Section title contents) =
     "{\n      \"section\": {\n" ++
-    "        \"title\": " ++ maybe "null" (\t -> "\"" ++ escapeJson t ++ "\"") title ++ ",\n" ++
+    "        \"title\": " ++ 
+    maybe "null" (\t -> "\"" ++ escapeJson t ++ "\"") title ++ 
+    ",\n" ++
     "        \"contents\": [\n          " ++
     concatMap contentToJson contents ++
     "        ]\n      }\n    },\n    "

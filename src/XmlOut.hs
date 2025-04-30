@@ -1,5 +1,9 @@
--- Updated XmlOut.hs with proper XML escaping and formatting
-
+{-
+-- EPITECH PROJECT, 2024
+-- XmlOut.hs
+-- File description:
+-- Converts Document to Xml format
+-}
 module XmlOut
     ( documentToXml
     ) where
@@ -45,13 +49,17 @@ contentToXml (List items) =
 -- | Convert Inline to XML
 inlineToXml :: Inline -> String
 inlineToXml (PlainText text) = escapeXml text
-inlineToXml (Bold inlines) = "<bold>" ++ concatMap inlineToXml inlines ++ "</bold>"
-inlineToXml (Italic inlines) = "<italic>" ++ concatMap inlineToXml inlines ++ "</italic>"
+inlineToXml (Bold inlines) = 
+    "<bold>" ++ concatMap inlineToXml inlines ++ "</bold>"
+inlineToXml (Italic inlines) = 
+    "<italic>" ++ concatMap inlineToXml inlines ++ "</italic>"
 inlineToXml (Code text) = "<code>" ++ escapeXml text ++ "</code>"
 inlineToXml (Link text url) = 
-    "<link href=\"" ++ escapeXml url ++ "\">" ++ escapeXml text ++ "</link>"
+    "<link href=\"" ++ escapeXml url ++ "\">" ++ 
+    escapeXml text ++ "</link>"
 inlineToXml (Image alt url) = 
-    "<image src=\"" ++ escapeXml url ++ "\" alt=\"" ++ escapeXml alt ++ "\"></image>"
+    "<image src=\"" ++ escapeXml url ++ "\" alt=\"" ++ 
+    escapeXml alt ++ "\"></image>"
 
 -- | Convert ListItem to XML
 listItemToXml :: ListItem -> String

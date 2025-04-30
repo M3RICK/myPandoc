@@ -1,6 +1,8 @@
 #!/bin/bash
 # Test script for mypandoc
 
+clear
+
 # Build the project
 echo "Building mypandoc..."
 make re
@@ -58,5 +60,7 @@ run_test "Auto-detect XML" "./mypandoc -i test.xml -f markdown -o auto_xml.md"
 
 # Test 8: Auto-detect JSON
 run_test "Auto-detect JSON" "./mypandoc -i test.json -f xml -o auto_json.xml"
+
+make fclean
 
 echo "All tests completed."

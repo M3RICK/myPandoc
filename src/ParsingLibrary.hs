@@ -245,21 +245,25 @@ intingeger = orElse
     Nothing -> Nothing)
   natural
 
+-- | Components of a tuple parser BECAUSE CODING STYLE HAHAHAHAHAHHAHAAHAHHAHH
+charP :: Char -> Parser Char
+charP = char
+
+elemP :: Parser a -> Parser a
+elemP = id
+
 -- | Tuple (a,b) entre parenthèses
 tupleP :: Parser a -> Parser (a, a)
-tupleP p = Parser $ \input ->
-  case run (char '(') input of
-    Nothing -> Nothing
-    Just (_, s1) ->
-      case run p s1 of
-        Nothing -> Nothing
-        Just (x, s2) ->
-          case run (char ',') s2 of
-            Nothing -> Nothing
-            Just (_, s3) ->
-              case run p s3 of
-                Nothing -> Nothing
-                Just (y, s4) ->
-                  case run (char ')') s4 of
-                    Nothing -> Nothing
-                    Just (_, s5) -> Just ((x, y), s5)
+tupleP p = between (charP '(') (charP ')') (separatedBy p (charP ','))
+
+-- | Parser for elements between opening and closing symbols
+between :: Parser open -> Parser close -> Parser a -> Parser a
+between open close p = open *> p <* close
+
+-- | Parser for elements separated by a delimiter
+separatedBy :: Parser a -> Parser sep -> Parser (a, a)
+separatedBy p sep = do
+  x <- p
+  _ <- sep
+  y <- p
+  return (x, y)

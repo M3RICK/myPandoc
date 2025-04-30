@@ -42,8 +42,10 @@ contentToMarkdown (List items) =
 -- | Convert Inline to Markdown
 inlineToMarkdown :: Inline -> String
 inlineToMarkdown (PlainText text) = text
-inlineToMarkdown (Bold inlines) = "**" ++ concatMap inlineToMarkdown inlines ++ "**"
-inlineToMarkdown (Italic inlines) = "*" ++ concatMap inlineToMarkdown inlines ++ "*"
+inlineToMarkdown (Bold inlines) = 
+    "**" ++ concatMap inlineToMarkdown inlines ++ "**"
+inlineToMarkdown (Italic inlines) = 
+    "*" ++ concatMap inlineToMarkdown inlines ++ "*"
 inlineToMarkdown (Code text) = "`" ++ text ++ "`"
 inlineToMarkdown (Link text url) = "[" ++ text ++ "](" ++ url ++ ")"
 inlineToMarkdown (Image alt url) = "![" ++ alt ++ "](" ++ url ++ ")"

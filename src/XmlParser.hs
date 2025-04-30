@@ -12,6 +12,25 @@ module XmlParser
 import ParsingLibrary
 import Document
 
+-- | Parse document body
+parseDocumentBody :: Parser [Content]
+parseDocumentBody =
+    skipWhitespace *>
+    stringP "<body>" *>
+    skipWhitespace *>
+    parseContents >>= \content' ->
+    skipWhitespace *>
+    stringP "</body>" *>
+    return content'
+
+-- | Parse document closing tag
+parseDocumentEnd :: Parser ()
+parseDocumentEnd =
+    skipWhitespace *>
+    stringP "</document>" *>
+    skipWhitespace *>
+    return ()
+
 -- | Parse a complete XML document
 parseXml :: Parser Document
 parseXml = 
@@ -19,20 +38,22 @@ parseXml =
     stringP "<document>" *>
     skipWhitespace *>
     parseHeader >>= \header' ->
-    skipWhitespace *>
-    stringP "<body>" *>
-    skipWhitespace *>
-    parseContents >>= \content' ->
-    skipWhitespace *>
-    stringP "</body>" *>
-    skipWhitespace *>
-    stringP "</document>" *>
-    skipWhitespace *>
+    parseDocumentBody >>= \content' ->
+    parseDocumentEnd *>
     return (Document header' content')
 
--- | Parse XML header section
-parseHeader :: Parser Header
-parseHeader = 
+-- | Create Header from attributes
+createHeader :: [(String, String)] -> Parser Header
+createHeader attrs =
+    let title' = findAttr "title" attrs ""
+        author' = lookup "author" attrs
+        date' = lookup "date" attrs
+    in return (Header title' author' date')
+
+-- | Parse XML header tag and contents
+parseHeaderTag :: Parser [(String, String)]
+parseHeaderTag =
+    skipWhitespace *>
     stringP "<header" *>
     skipWhitespace *>
     parseAttributes >>= \attrs ->
@@ -40,10 +61,12 @@ parseHeader =
     stringP ">" *>
     skipWhitespace *>
     stringP "</header>" *>
-    let title' = findAttr "title" attrs ""
-        author' = lookup "author" attrs
-        date' = lookup "date" attrs
-    in return (Header title' author' date')
+    return attrs
+
+-- | Parse XML header section
+parseHeader :: Parser Header
+parseHeader = 
+    parseHeaderTag >>= createHeader
 
 -- | Parse attributes in an XML tag
 parseAttributes :: Parser [(String, String)]
@@ -88,7 +111,10 @@ parseContents = manyP parseContent
 
 -- | Parse a content element
 parseContent :: Parser Content
-parseContent = parseParagraph `orElse` parseSection `orElse` parseCodeBlock `orElse` parseList
+parseContent = parseParagraph `orElse` 
+              parseSection `orElse` 
+              parseCodeBlock `orElse` 
+              parseList
 
 -- | Parse a paragraph element
 parseParagraph :: Parser Content
@@ -99,20 +125,30 @@ parseParagraph =
     stringP "</paragraph>" *>
     return (Paragraph inlines)
 
--- | Parse a section element
-parseSection :: Parser Content
-parseSection = 
+-- | Parse section opening
+parseSectionOpen :: Parser [(String, String)]
+parseSectionOpen =
     skipWhitespace *>
     stringP "<section" *>
     skipWhitespace *>
     parseAttributes >>= \attrs ->
     skipWhitespace *>
     stringP ">" *>
+    return attrs
+
+-- | Parse section contents
+parseSectionContents :: [(String, String)] -> Parser Content
+parseSectionContents attrs =
     skipWhitespace *>
     parseContents >>= \contents ->
     skipWhitespace *>
     stringP "</section>" *>
     return (Section (lookup "title" attrs) contents)
+
+-- | Parse a section element
+parseSection :: Parser Content
+parseSection = 
+    parseSectionOpen >>= parseSectionContents
 
 -- | Parse a code block element
 parseCodeBlock :: Parser Content
@@ -157,8 +193,13 @@ parseInlines = manyP parseInline
 
 -- | Parse a single inline element
 parseInline :: Parser Inline
-parseInline = parsePlainText `orElse` parseBold `orElse` parseItalic `orElse` 
-            parseCode `orElse` parseLink `orElse` parseImage
+parseInline = 
+    parsePlainText `orElse` 
+    parseBold `orElse` 
+    parseItalic `orElse` 
+    parseCode `orElse` 
+    parseLink `orElse` 
+    parseImage
 
 -- | Parse plain text
 parsePlainText :: Parser Inline

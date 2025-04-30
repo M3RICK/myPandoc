@@ -17,52 +17,23 @@ import Control.Monad (unless)
 import Data.Char (toLower, isSpace)
 import Data.List (dropWhileEnd)
 
--- | Main func, checks if file exists, accessible, empty...
-validateFile :: String -> FilePath -> IO ()
-validateFile fmt filePath =
-  doesFileExist' filePath >>= \exists ->
-    if not exists
-    then usageError $ "File does not exist: " ++ filePath
-    else isFileEmpty filePath >>= \isEmpty ->
-      if isEmpty
-      then usageError $ "Input file is empty: " ++ filePath
-      else isValidContent fmt filePath >>= \isValid ->
-        unless isValid $ usageError $ "Input file contains invalid content for format: " ++ fmt
+-- | Error displayer, you know the drill...
+usageError :: String -> IO a
+usageError msg =
+  putStrLn ("ERROR: " ++ msg) >>
+  exitWith (ExitFailure 84)
 
--- | bruteforce way to get format
-detectFormat :: FilePath -> IO String
-detectFormat filePath = do
-    content <- readFile filePath
-    let trimmedContent = trim content
-    case trimmedContent of
-      ('<':_) -> return "xml"
-      ('{':_) -> return "json"
-      ('-':'-':'-':_) -> return "markdown"
-      _ -> usageError $ "Unable to detect input format for file: " ++ filePath
-  where
-    trim = dropWhileEnd isSpace . dropWhile isSpace
+-- | Trim whitespace from start and end
+trim :: String -> String
+trim = dropWhileEnd isSpace . dropWhile isSpace
 
--- | checks verry poorly for correct format structure
-isValidContent :: String -> FilePath -> IO Bool
-isValidContent fmt filePath = do
-  content <- readFile filePath
-  let trimmedContent = trim content
-  return $ case map toLower fmt of
-    "xml" -> isPrefixOf "<document>" trimmedContent
-    "json" -> isPrefixOf "{" trimmedContent
-    "markdown" -> isPrefixOf "---" trimmedContent
-    _ -> False
-  where
-    -- Helper function to check if a string is a prefix of another
-    isPrefixOf :: String -> String -> Bool
-    isPrefixOf [] _ = True
-    isPrefixOf _ [] = False
-    isPrefixOf (p:ps) (s:ss) = p == s && isPrefixOf ps ss
-    
-    -- Trim whitespace from start and end
-    trim = dropWhileEnd isSpace . dropWhile isSpace
+-- | Helper function to check if a string is a prefix of another
+isPrefixOf :: String -> String -> Bool
+isPrefixOf [] _ = True
+isPrefixOf _ [] = False
+isPrefixOf (p:ps) (s:ss) = p == s && isPrefixOf ps ss
 
--- | Self Explanatory
+-- | Check if file exists
 doesFileExist' :: FilePath -> IO Bool
 doesFileExist' filePath =
   try (openFile filePath ReadMode) >>= \result ->
@@ -72,7 +43,7 @@ doesFileExist' filePath =
         | otherwise -> return False
       Right handle -> hClose handle >> return True
 
--- | Self Explanatory
+-- | Check if file is empty
 isFileEmpty :: FilePath -> IO Bool
 isFileEmpty filePath =
   openFile filePath ReadMode >>= \handle ->
@@ -80,8 +51,65 @@ isFileEmpty filePath =
       hClose handle >>
       return (fileSize == 0)
 
--- | Error displayer, you know the drill...
-usageError :: String -> IO a
-usageError msg =
-  putStrLn ("ERROR: " ++ msg) >>
-  exitWith (ExitFailure 84)
+-- | Validate file content for XML format
+validateXml :: String -> Bool
+validateXml content = isPrefixOf "<document>" content
+
+-- | Validate file content for JSON format
+validateJson :: String -> Bool
+validateJson content = isPrefixOf "{" content
+
+-- | Validate file content for Markdown format
+validateMarkdown :: String -> Bool
+validateMarkdown content = isPrefixOf "---" content
+
+-- | checks verry poorly for correct format structure
+isValidContent :: String -> FilePath -> IO Bool
+isValidContent fmt filePath = do
+  content <- readFile filePath
+  let trimmedContent = trim content
+  return $ validateForFormat (map toLower fmt) trimmedContent
+  where
+    validateForFormat "xml" = validateXml
+    validateForFormat "json" = validateJson
+    validateForFormat "markdown" = validateMarkdown
+    validateForFormat _ = const False
+
+-- | Handle file not existing case
+handleNonExistentFile :: FilePath -> IO ()
+handleNonExistentFile filePath = 
+  usageError $ "File does not exist: " ++ filePath
+
+-- | Handle empty file case
+handleEmptyFile :: FilePath -> IO ()
+handleEmptyFile filePath = 
+  usageError $ "Input file is empty: " ++ filePath
+
+-- | Handle invalid content case
+handleInvalidContent :: String -> IO ()
+handleInvalidContent fmt = 
+  usageError $ "Input file contains invalid content for format: " ++ fmt
+
+-- | Main func, checks if file exists, accessible, empty...
+validateFile :: String -> FilePath -> IO ()
+validateFile fmt filePath =
+  doesFileExist' filePath >>= \exists ->
+  unless exists (handleNonExistentFile filePath) >>
+  isFileEmpty filePath >>= \isEmpty ->
+  unless (not isEmpty) (handleEmptyFile filePath) >>
+  isValidContent fmt filePath >>= \isValid ->
+  unless isValid (handleInvalidContent fmt)
+
+-- | bruteforce way to get format
+detectFormat :: FilePath -> IO String
+detectFormat filePath = do
+  content <- readFile filePath
+  let trimmedContent = trim content
+  identifyFormat trimmedContent
+  where
+    identifyFormat content
+      | isPrefixOf "<" content = return "xml"
+      | isPrefixOf "{" content = return "json"
+      | isPrefixOf "---" content = return "markdown"
+      | otherwise = usageError $ 
+          "Unable to detect input format for file: " ++ filePath

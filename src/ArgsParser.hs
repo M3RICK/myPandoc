@@ -25,20 +25,22 @@ data ConvertInfo = ConvertInfo
     , inputFormat :: Maybe String    -- Optional input format (xml, json, markdown)
     } deriving (Show)
 
+-- | Usage message for the program
+usageMessage :: String
+usageMessage = unlines
+    [ "USAGE: ./mypandoc -i ifile -f oformat [-o ofile] [-e iformat]"
+    , ""
+    , "  ifile\t\tpath to the file to convert"
+    , "  oformat\toutput format (xml, json, markdown)"
+    , "  ofile\t\tpath to the output file"
+    , "  iformat\tinput format (xml, json, markdown)"
+    ]
+
 -- | Display an error message and exit with code 84
 usageError :: String -> IO a
 usageError msg = hPutStrLn stderr ("ERROR: " ++ msg) >>
     hPutStrLn stderr usageMessage >>
     exitWith (ExitFailure 84)
-  where
-    usageMessage = unlines
-        [ "USAGE: ./mypandoc -i ifile -f oformat [-o ofile] [-e iformat]"
-        , ""
-        , "  ifile\t\tpath to the file to convert"
-        , "  oformat\toutput format (xml, json, markdown)"
-        , "  ofile\t\tpath to the output file"
-        , "  iformat\tinput format (xml, json, markdown)"
-        ]
 
 -- | List of allowed formats
 allowedFormats :: [String]
@@ -51,66 +53,97 @@ validateFormat fmt =
         then return ()
         else usageError $ "Invalid format: " ++ fmt
 
--- | Basically get's all the info you need in the right place, also takes care of handling optionnal flags and whatknot
-parseArgs :: [String] -> IO ConvertInfo
-parseArgs args =
+-- | Create argument pairs from list
+toPairs :: [String] -> [(String, String)]
+toPairs [] = []
+toPairs (f:v:rest) = (f, v) : toPairs rest
+toPairs _ = error "Internal error: invalid argument structure"
+
+-- | Check that all flags are valid
+checkValidFlags :: [(String, String)] -> IO ()
+checkValidFlags pairs = mapM_ checkPair pairs
+  where
+    valid = ["-i", "-f", "-o", "-e"]
+    checkPair (f, _) | f `elem` valid = return ()
+                     | otherwise = usageError $ "Invalid flag: " ++ f
+
+-- | Checks required flags
+checkRequiredFlags :: [(String, String)] -> IO ()
+checkRequiredFlags pairs =
+    unless ("-i" `elem` flags) (usageError "Missing required flag: -i") >>
+    unless ("-f" `elem` flags) (usageError "Missing required flag: -f")
+  where flags = map fst pairs
+
+-- | Check for duplicates
+checkDuplicates :: [(String, String)] -> IO ()
+checkDuplicates pairs = case duplicates of
+    [] -> return ()
+    ds -> usageError $ "Duplicate flags: " ++ unwords ds
+  where
+    flags = map fst pairs
+    duplicates = flags \\ nub flags
+
+-- | Retrieve the value for a required flag
+getRequired :: String -> [(String, String)] -> IO String
+getRequired flag pairs = 
+    maybe (usageError $ "Missing value for " ++ flag) return (lookup flag pairs)
+
+-- | Retrieve the value for an optional flag
+getOptional :: String -> [(String, String)] -> IO (Maybe String)
+getOptional flag pairs = return (lookup flag pairs)
+
+-- | Validate file with format
+validateFileWithFormat :: String -> String -> FilePath -> IO ()
+validateFileWithFormat formatStr fmt filePath =
+    validateFormat formatStr >>
+    validateFormat fmt >>
+    validateFile fmt filePath
+
+-- | Create ConvertInfo with detected format
+createWithDetectedFormat :: FilePath 
+                        -> String 
+                        -> Maybe FilePath 
+                        -> String 
+                        -> IO ConvertInfo
+createWithDetectedFormat filePath formatStr outFilePath fmt =
+    return (ConvertInfo filePath formatStr outFilePath (Just fmt))
+
+-- | Process detected format
+processDetectedFormat :: FilePath -> String -> Maybe FilePath -> IO ConvertInfo
+processDetectedFormat filePath formatStr outFilePath = 
+    detectFormat filePath >>= \fmt ->
+    validateFileWithFormat formatStr fmt filePath >>
+    createWithDetectedFormat filePath formatStr outFilePath fmt
+
+-- | Process provided format
+processProvidedFormat :: FilePath 
+                     -> String 
+                     -> Maybe FilePath 
+                     -> String 
+                     -> IO ConvertInfo
+processProvidedFormat filePath formatStr outFilePath providedFormat =
+    validateFileWithFormat formatStr providedFormat filePath >>
+    createWithDetectedFormat filePath formatStr outFilePath providedFormat
+
+-- | Parse args to check if they're valid
+checkArgs :: [String] -> IO [(String, String)]
+checkArgs args = 
     when (odd $ length args) (usageError "Invalid number of arguments") >>
     let pairs = toPairs args in
     checkValidFlags pairs >>
     checkRequiredFlags pairs >>
     checkDuplicates pairs >>
+    return pairs
+
+-- | Basically get's all the info you need in the right place
+parseArgs :: [String] -> IO ConvertInfo
+parseArgs args =
+    checkArgs args >>= \pairs ->
     getRequired "-i" pairs >>= \filePath ->
     getRequired "-f" pairs >>= \formatStr ->
     getOptional "-o" pairs >>= \outFilePath ->
     getOptional "-e" pairs >>= \formatSpec ->
-    maybe (detectFormat filePath >>= \detectedFormat ->
-               validateFormat formatStr >>
-               validateFormat detectedFormat >>
-               validateFile detectedFormat filePath >>
-               return (ConvertInfo filePath formatStr outFilePath (Just detectedFormat))
-          )
-          (\providedFormat ->
-               validateFormat formatStr >>
-               validateFormat providedFormat >>
-               validateFile providedFormat filePath >>
-               return (ConvertInfo filePath formatStr outFilePath (Just providedFormat))
-          )
-          formatSpec
-  where
-    -- | converts to pairs so that flag and data are together
-    toPairs :: [String] -> [(String, String)]
-    toPairs [] = []
-    toPairs (f:v:rest) = (f, v) : toPairs rest
-    toPairs _ = error "Internal error: invalid argument structure"
-
-    -- | Check that all flags are valid
-    checkValidFlags :: [(String, String)] -> IO ()
-    checkValidFlags pairs' = mapM_ checkPair pairs'
-      where
-        valid = ["-i", "-f", "-o", "-e"]
-        checkPair (f, _) | f `elem` valid = return ()
-                         | otherwise = usageError $ "Invalid flag: " ++ f
-
-    -- | Checks 4 mandatory flags
-    checkRequiredFlags :: [(String, String)] -> IO ()
-    checkRequiredFlags pairs' =
-        unless ("-i" `elem` flags) (usageError "Missing required flag: -i") >>
-        unless ("-f" `elem` flags) (usageError "Missing required flag: -f")
-      where flags = map fst pairs'
-
-    -- | Check for dups
-    checkDuplicates :: [(String, String)] -> IO ()
-    checkDuplicates pairs' = case duplicates of
-        [] -> return ()
-        ds -> usageError $ "Duplicate flags: " ++ unwords ds
-      where
-        flags = map fst pairs'
-        duplicates = flags \\ nub flags
-
-    -- | Retrieve the value for a required flag
-    getRequired :: String -> [(String, String)] -> IO String
-    getRequired flag pairs' = maybe (usageError $ "Missing value for " ++ flag) return (lookup flag pairs')
-
-    -- | Retrieve the value for an optional flag
-    getOptional :: String -> [(String, String)] -> IO (Maybe String)
-    getOptional flag pairs' = return (lookup flag pairs')
+    maybe 
+        (processDetectedFormat filePath formatStr outFilePath)
+        (processProvidedFormat filePath formatStr outFilePath)
+        formatSpec
