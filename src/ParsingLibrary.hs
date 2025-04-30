@@ -2,10 +2,8 @@
 -- EPITECH PROJECT, 2024
 -- ParsingLibrary.hs
 -- File description:
--- Its parsin time
+-- Enhanced parsing library with monadic interface
 -}
-
---  A NOTER QUE P A LA FIN DE CHAQUE MERDE C EST POUR PARSER par exemple ma biche manyP, many PARSEEEEEEEEEEEEEER
 
 module ParsingLibrary
   ( ParseResult
@@ -49,6 +47,8 @@ module ParsingLibrary
   ) where
 
 import Data.Char (isDigit, isAlpha, isAlphaNum, isSpace)
+import Control.Applicative (Alternative(..))
+import Control.Monad (MonadPlus(..))
 
 -- | Type de retour d'un parseur : soit une valeur avec le reste de l'entrée, soit échec
 type ParseResult a = Maybe (a, String)
@@ -164,7 +164,7 @@ letter = satisfy isAlpha
 alphaNum::Parser Char
 alphaNum = satisfy isAlphaNum
 
--- | Caractère d’espace
+-- | Caractère d'espace
 space::Parser Char
 space = satisfy isSpace
 
@@ -176,11 +176,11 @@ skipSpaces = manyP space
 token::Parser a -> Parser a
 token p = map2P const p skipSpaces
 
--- | Accepte un caractère d’une chaîne
+-- | Accepte un caractère d'une chaîne
 oneOfStr::String -> Parser Char
 oneOfStr = oneOf
 
--- | Rejette un caractère d’une chaîne
+-- | Rejette un caractère d'une chaîne
 noneOfStr::String -> Parser Char
 noneOfStr = noneOf
 
@@ -196,7 +196,7 @@ skipWhitespace = manyP (oneOf " \t\n\r")
 word::Parser String
 word = map2P (:) letter (manyP alphaNum)
 
--- | Mot-clé exact, non suivi d’un mot
+-- | Mot-clé exact, non suivi d'un mot
 exactWord::String -> Parser String
 exactWord kw = thenP (stringP kw) $ \res rest ->
   case rest of
@@ -208,7 +208,7 @@ natural::Parser Int
 natural = mapP read (someP digit)
 
 -- | Entier signé (+ ou -)
-intingeger::Parser Int -- inting tousse tousse you get it thierry
+intingeger::Parser Int
 intingeger = orElse
   (thenP (char '-') $ \_ r -> case run natural r of
     Just (n, rest) -> Just (-n, rest)
@@ -233,3 +233,35 @@ tupleP p = Parser $ \input ->
                   case run (char ')') s4 of
                     Nothing -> Nothing
                     Just (_, s5) -> Just ((x, y), s5)
+
+-- | Add Functor instance for Parser
+instance Functor Parser where
+    fmap f p = Parser $ \input -> case run p input of
+        Nothing -> Nothing
+        Just (v, rest) -> Just (f v, rest)
+
+-- | Add Applicative instance for Parser
+instance Applicative Parser where
+    pure = pureP
+    p1 <*> p2 = Parser $ \input -> case run p1 input of
+        Nothing -> Nothing
+        Just (f, rest) -> case run p2 rest of
+            Nothing -> Nothing
+            Just (v, rest') -> Just (f v, rest')
+
+-- | Add Alternative instance for Parser
+instance Alternative Parser where
+    empty = emptyP
+    p1 <|> p2 = orElse p1 p2
+
+-- | Add Monad instance for Parser
+instance Monad Parser where
+    return = pure
+    p >>= f = Parser $ \input -> case run p input of
+        Nothing -> Nothing
+        Just (v, rest) -> run (f v) rest
+
+-- | Add MonadPlus instance for Parser
+instance MonadPlus Parser where
+    mzero = empty
+    mplus = (<|>)
