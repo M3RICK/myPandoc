@@ -15,26 +15,41 @@ import Data.Char (isAlphaNum)
 
 -- | Parse a complete XML document
 parseXml :: Parser Document
-parseXml = do
-    skipWhitespace
-    stringP "<document>"
+parseXml =
+    skipWhitespace >>
+    stringP "<document>" >>
+    parseDocumentContent
+
+-- | Parse document content (after opening tag)
+parseDocumentContent :: Parser Document
+parseDocumentContent = do
     skipWhitespace
     header' <- parseHeader
     skipWhitespace
     content' <- parseDocumentBody
-    skipWhitespace
-    stringP "</document>"
-    skipWhitespace
+    parseDocumentEnd
     return (Document header' content')
+
+-- | Parse document end tag
+parseDocumentEnd :: Parser ()
+parseDocumentEnd =
+    skipWhitespace >>
+    stringP "</document>" >>
+    skipWhitespace >>
+    return ()
 
 -- | Parse document body
 parseDocumentBody :: Parser [Content]
 parseDocumentBody = do
     stringP "<body>"
     skipWhitespace
-    contents <- manyP (parseContent <* skipWhitespace)
+    contents <- parseBodyContents
     stringP "</body>"
     return contents
+
+-- | Parse body contents
+parseBodyContents :: Parser [Content]
+parseBodyContents = manyP (parseContent <* skipWhitespace)
 
 -- | Create Header from attributes
 createHeader :: [(String, String)] -> Header
@@ -46,9 +61,14 @@ createHeader attrs =
 
 -- | Parse XML header tag and contents
 parseHeader :: Parser Header
-parseHeader = do
-    skipWhitespace
-    stringP "<header"
+parseHeader =
+    skipWhitespace >>
+    stringP "<header" >>
+    parseHeaderAttributes
+
+-- | Parse header attributes and closing tag
+parseHeaderAttributes :: Parser Header
+parseHeaderAttributes = do
     skipWhitespace
     attrs <- parseAttributes
     skipWhitespace
@@ -64,11 +84,21 @@ parseAttribute :: Parser (String, String)
 parseAttribute = do
     skipWhitespace
     name <- parseAttributeName
+    parseAttributeEquals name
+
+-- | Parse the equals sign and value of an attribute
+parseAttributeEquals :: String -> Parser (String, String)
+parseAttributeEquals name = do
     skipWhitespace
     char '='
     skipWhitespace
+    parseAttributeValue name
+
+-- | Parse attribute value in quotes
+parseAttributeValue :: String -> Parser (String, String)
+parseAttributeValue name = do
     char '"'
-    value <- parseAttributeValue
+    value <- manyP (satisfy (/= '"'))
     char '"'
     return (name, value)
 
@@ -79,10 +109,6 @@ isAttributeNameChar c = isAlphaNum c || c == '_' || c == '-'
 -- | Parse attribute name
 parseAttributeName :: Parser String
 parseAttributeName = someP (satisfy isAttributeNameChar)
-
--- | Parse attribute value (characters between quotes)
-parseAttributeValue :: Parser String
-parseAttributeValue = manyP (satisfy (/= '"'))
 
 -- | Get attribute value with default
 findAttr :: String -> [(String, String)] -> String -> String
@@ -107,18 +133,22 @@ parseParagraph = do
     stringP "</paragraph>"
     return (Paragraph inlines)
 
--- | Parse a section element
+-- | Parse a section element - opening tag and attributes
 parseSection :: Parser Content
 parseSection = do
     skipWhitespace
     stringP "<section"
     skipWhitespace
     attrs <- parseAttributes
+    parseSectionContent attrs
+
+-- | Parse section content and closing tag
+parseSectionContent :: [(String, String)] -> Parser Content
+parseSectionContent attrs = do
     skipWhitespace
     stringP ">"
     skipWhitespace
     contents <- manyP (parseContent <* skipWhitespace)
-    skipWhitespace
     stringP "</section>"
     return (Section (lookup "title" attrs) contents)
 
@@ -134,17 +164,24 @@ parseCodeBlock = do
 -- | Parse text until a specific closing tag
 parseTextUntil :: String -> Parser String
 parseTextUntil endTag = Parser $ \input ->
-    let endTagIndex = findEndTag input 0
-        (content, rest) = splitAt endTagIndex input
-    in if endTagIndex >= 0 && take (length endTag) rest == endTag
+    let (content, rest) = breakAtTag input endTag
+    in if take (length endTag) rest == endTag
        then Just (content, rest)
        else Nothing
-  where
-    findEndTag :: String -> Int -> Int
-    findEndTag [] _ = -1
-    findEndTag str@(c:cs) idx
-      | take (length endTag) str == endTag = idx
-      | otherwise = findEndTag cs (idx + 1)
+
+-- | Helper to break a string at a tag
+breakAtTag :: String -> String -> (String, String)
+breakAtTag input tag =
+    let idx = findTagIndex input tag 0
+    in splitAt idx input
+
+-- | Find index of a tag in a string
+findTagIndex :: String -> String -> Int -> Int
+findTagIndex [] _ _ = 0
+findTagIndex str tag idx
+    | take (length tag) str == tag = idx
+    | null str = 0
+    | otherwise = findTagIndex (tail str) tag (idx + 1)
 
 -- | Parse a list element
 parseList :: Parser Content
@@ -152,6 +189,11 @@ parseList = do
     skipWhitespace
     stringP "<list>"
     skipWhitespace
+    parseListItems
+
+-- | Parse list items and closing tag
+parseListItems :: Parser Content
+parseListItems = do
     items <- manyP (parseListItem <* skipWhitespace)
     stringP "</list>"
     return (List items)
@@ -171,8 +213,11 @@ parseInlines = manyP parseInline
 
 -- | Parse a single inline element
 parseInline :: Parser Inline
-parseInline =
-    parsePlainText `orElse`
+parseInline = parsePlainText `orElse` parseFormattedInline
+
+-- | Parse formatted inline elements
+parseFormattedInline :: Parser Inline
+parseFormattedInline =
     parseBold `orElse`
     parseItalic `orElse`
     parseCode `orElse`
@@ -209,12 +254,17 @@ parseCode = do
     stringP "</code>"
     return (Code code)
 
--- | Parse link
+-- | Parse link opening tag and attributes
 parseLink :: Parser Inline
 parseLink = do
     stringP "<link"
     skipWhitespace
     attrs <- parseAttributes
+    parseLinkContent attrs
+
+-- | Parse link content and closing tag
+parseLinkContent :: [(String, String)] -> Parser Inline
+parseLinkContent attrs = do
     skipWhitespace
     stringP ">"
     text <- parseTextUntil "</link>"
@@ -228,6 +278,11 @@ parseImage = do
     stringP "<image"
     skipWhitespace
     attrs <- parseAttributes
+    parseImageEnd attrs
+
+-- | Parse image end tag
+parseImageEnd :: [(String, String)] -> Parser Inline
+parseImageEnd attrs = do
     skipWhitespace
     stringP "></image>"
     let alt = findAttr "alt" attrs ""
