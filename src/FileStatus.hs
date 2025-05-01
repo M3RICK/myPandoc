@@ -111,10 +111,9 @@ validateFile fmt filePath =
 detectFormat :: FilePath -> IO String
 detectFormat filePath = do
   content <- readFile filePath
-  let trimmedContent = trim content
-  identifyFormat trimmedContent
+  identifyFormat (trim content)
   where
-    identifyFormat content
-      | (take 1 (trim content) == "<") || ("<?xml" `isPrefixOf` content) = return "xml"
-      | (take 1 (trim content) == "{") || (take 1 (trim content) == "[") = return "json"
-      | otherwise = return "markdown"  -- Default to markdown if nothing else matches
+    identifyFormat c
+      | take 1 c == "<" || "<?xml" `isPrefixOf` c = return "xml"
+      | take 1 c == "{" || take 1 c == "[" = return "json"
+      | otherwise = return "markdown"  -- Default to markdown

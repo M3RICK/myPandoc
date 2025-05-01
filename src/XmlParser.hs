@@ -88,10 +88,10 @@ parseAttribute = do
 
 -- | Parse the equals sign and value of an attribute
 parseAttributeEquals :: String -> Parser (String, String)
-parseAttributeEquals name = do
-    skipWhitespace
-    char '='
-    skipWhitespace
+parseAttributeEquals name =
+    skipWhitespace >>
+    char '=' >>
+    skipWhitespace >>
     parseAttributeValue name
 
 -- | Parse attribute value in quotes
@@ -185,10 +185,10 @@ findTagIndex str tag idx
 
 -- | Parse a list element
 parseList :: Parser Content
-parseList = do
-    skipWhitespace
-    stringP "<list>"
-    skipWhitespace
+parseList =
+    skipWhitespace >>
+    stringP "<list>" >>
+    skipWhitespace >>
     parseListItems
 
 -- | Parse list items and closing tag
@@ -282,9 +282,7 @@ parseImage = do
 
 -- | Parse image end tag
 parseImageEnd :: [(String, String)] -> Parser Inline
-parseImageEnd attrs = do
-    skipWhitespace
-    stringP "></image>"
-    let alt = findAttr "alt" attrs ""
-        src = findAttr "src" attrs ""
-    return (Image alt src)
+parseImageEnd attrs =
+    skipWhitespace >>
+    stringP "></image>" >>
+    return (Image (findAttr "alt" attrs "") (findAttr "src" attrs ""))

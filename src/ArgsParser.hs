@@ -15,7 +15,7 @@ import System.IO (hPutStrLn, stderr)
 import Data.Char (toLower)
 import Data.List ((\\), nub)
 import Control.Monad (when, unless)
-import FileStatus (validateFile, detectFormat) 
+import FileStatus (validateFile, detectFormat)
 
 -- | Data structure to store parsed command-line arguments
 data ConvertInfo = ConvertInfo
@@ -85,8 +85,10 @@ checkDuplicates pairs = case duplicates of
 
 -- | Retrieve the value for a required flag
 getRequired :: String -> [(String, String)] -> IO String
-getRequired flag pairs = 
-    maybe (usageError $ "Missing value for " ++ flag) return (lookup flag pairs)
+getRequired flag pairs =
+    maybe (usageError $ missingValueMsg flag) return (lookup flag pairs)
+    where
+      missingValueMsg f = "Missing value for " ++ f
 
 -- | Retrieve the value for an optional flag
 getOptional :: String -> [(String, String)] -> IO (Maybe String)
@@ -100,26 +102,26 @@ validateFileWithFormat formatStr fmt filePath =
     validateFile fmt filePath
 
 -- | Create ConvertInfo with detected format
-createWithDetectedFormat :: FilePath 
-                        -> String 
-                        -> Maybe FilePath 
-                        -> String 
+createWithDetectedFormat :: FilePath
+                        -> String
+                        -> Maybe FilePath
+                        -> String
                         -> IO ConvertInfo
 createWithDetectedFormat filePath formatStr outFilePath fmt =
     return (ConvertInfo filePath formatStr outFilePath (Just fmt))
 
 -- | Process detected format
 processDetectedFormat :: FilePath -> String -> Maybe FilePath -> IO ConvertInfo
-processDetectedFormat filePath formatStr outFilePath = 
+processDetectedFormat filePath formatStr outFilePath =
     detectFormat filePath >>= \fmt ->
     validateFileWithFormat formatStr fmt filePath >>
     createWithDetectedFormat filePath formatStr outFilePath fmt
 
 -- | Process provided format
-processProvidedFormat :: FilePath 
-                     -> String 
-                     -> Maybe FilePath 
-                     -> String 
+processProvidedFormat :: FilePath
+                     -> String
+                     -> Maybe FilePath
+                     -> String
                      -> IO ConvertInfo
 processProvidedFormat filePath formatStr outFilePath providedFormat =
     validateFileWithFormat formatStr providedFormat filePath >>
@@ -127,7 +129,7 @@ processProvidedFormat filePath formatStr outFilePath providedFormat =
 
 -- | Parse args to check if they're valid
 checkArgs :: [String] -> IO [(String, String)]
-checkArgs args = 
+checkArgs args =
     when (odd $ length args) (usageError "Invalid number of arguments") >>
     let pairs = toPairs args in
     checkValidFlags pairs >>
@@ -143,7 +145,7 @@ parseArgs args =
     getRequired "-f" pairs >>= \formatStr ->
     getOptional "-o" pairs >>= \outFilePath ->
     getOptional "-e" pairs >>= \formatSpec ->
-    maybe 
+    maybe
         (processDetectedFormat filePath formatStr outFilePath)
         (processProvidedFormat filePath formatStr outFilePath)
         formatSpec

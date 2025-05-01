@@ -217,22 +217,13 @@ intingeger = orElse
 
 -- | Tuple (a,b) entre parenthèses
 tupleP :: Parser a -> Parser (a, a)
-tupleP p = Parser $ \input ->
-  case run (char '(') input of
-    Nothing -> Nothing
-    Just (_, s1) ->
-      case run p s1 of
-        Nothing -> Nothing
-        Just (x, s2) ->
-          case run (char ',') s2 of
-            Nothing -> Nothing
-            Just (_, s3) ->
-              case run p s3 of
-                Nothing -> Nothing
-                Just (y, s4) ->
-                  case run (char ')') s4 of
-                    Nothing -> Nothing
-                    Just (_, s5) -> Just ((x, y), s5)
+tupleP p = do
+  char '('
+  x <- p
+  char ','
+  y <- p
+  char ')'
+  return (x, y)
 
 -- | Add Functor instance for Parser
 instance Functor Parser where
