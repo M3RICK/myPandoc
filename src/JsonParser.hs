@@ -2,7 +2,7 @@
 -- EPITECH PROJECT, 2024
 -- JsonParser.hs
 -- File description:
--- JSON Parser implementation for school format - Fixed compilation error
+-- JSON Parser implementation for school format
 -}
 
 module JsonParser
@@ -24,7 +24,7 @@ data JsonVal
     deriving (Show)
 
 -- | Main entry point - Parse a full JSON document
-parseJson :: Parser Document
+parseJson::Parser Document
 parseJson = do
     skipWhitespace
     obj <- parseJsonObject
@@ -32,209 +32,222 @@ parseJson = do
     convertToDocument obj
 
 -- | Convert JSON object to Document structure
-convertToDocument :: [(String, JsonVal)] -> Parser Document
+convertToDocument::[(String, JsonVal)] -> Parser Document
 convertToDocument obj =
-    case extractSchoolDocument obj of
+    case extractDocument obj of
         Just doc -> return doc
-        Nothing -> emptyP  -- Parser fails if structure doesn't match
+        Nothing -> emptyP
 
 -- | Extract school document format
-extractSchoolDocument :: [(String, JsonVal)] -> Maybe Document
-extractSchoolDocument obj = do
-    header' <- extractSchoolHeader obj
-    body' <- extractSchoolBody obj
+extractDocument::[(String, JsonVal)] -> Maybe Document
+extractDocument obj = do
+    header' <- extractHeader obj
+    body' <- extractBody obj
     return (Document header' body')
 
 -- | Extract header in school format
-extractSchoolHeader :: [(String, JsonVal)] -> Maybe Header
-extractSchoolHeader obj = do
+extractHeader::[(String, JsonVal)] -> Maybe Header
+extractHeader obj = do
     headerVal <- lookup "header" obj
     case headerVal of
-        JsonObj fields -> do
-            title' <- extractStringField "title" fields
-            author' <- extractStringField "author" fields
-            date' <- extractStringField "date" fields
-            return (Header title' (Just author') (Just date'))
+        JsonObj fields -> extractHeaderFields fields
         _ -> Nothing
 
+-- | Extract header fields
+extractHeaderFields::[(String, JsonVal)] -> Maybe Header
+extractHeaderFields fields = do
+    title' <- extractStringField "title" fields
+    author' <- extractStringField "author" fields
+    date' <- extractStringField "date" fields
+    return (Header title' (Just author') (Just date'))
+
 -- | Extract body in school format
-extractSchoolBody :: [(String, JsonVal)] -> Maybe [Content]
-extractSchoolBody obj = do
+extractBody::[(String, JsonVal)] -> Maybe [Content]
+extractBody obj = do
     bodyVal <- lookup "body" obj
     case bodyVal of
-        JsonArr elements -> mapM extractSchoolContent elements
+        JsonArr elements -> mapM extractContent elements
         _ -> Nothing
 
 -- | Extract content in school format
-extractSchoolContent :: JsonVal -> Maybe Content
-extractSchoolContent (JsonArr elements) =
-    -- Array of elements is a paragraph
+extractContent::JsonVal -> Maybe Content
+extractContent (JsonArr elements) =
     Just (Paragraph (mapArrayToInlines elements))
-extractSchoolContent (JsonObj fields) =
-    -- Object can be section, codeblock, or list
+extractContent (JsonObj fields) =
     extractObjectContent fields
-extractSchoolContent _ = Nothing
+extractContent _ = Nothing
 
 -- | Extract content from object fields
-extractObjectContent :: [(String, JsonVal)] -> Maybe Content
+extractObjectContent::[(String, JsonVal)] -> Maybe Content
 extractObjectContent fields
-    | Just section <- extractSchoolSection fields = Just section
-    | Just codeblock <- extractSchoolCodeblock fields = Just codeblock
-    | Just list <- extractSchoolList fields = Just list
+    | Just section <- extractSection fields = Just section
+    | Just codeblock <- extractCodeblock fields = Just codeblock
+    | Just list <- extractList fields = Just list
     | otherwise = Nothing
 
 -- | Extract section in school format
-extractSchoolSection :: [(String, JsonVal)] -> Maybe Content
-extractSchoolSection fields = do
+extractSection::[(String, JsonVal)] -> Maybe Content
+extractSection fields = do
     sectionVal <- lookup "section" fields
-    case sectionVal of
-        JsonObj secFields -> do
-            -- Get title (might be empty string)
-            let title' = case lookup "title" secFields of
-                            Just (JsonStr t) -> Just t
-                            _ -> Just ""
+    extractSectionContent sectionVal
 
-            -- Get content array
-            contentVal <- lookup "content" secFields
-            case contentVal of
-                JsonArr elements -> do
-                    contents' <- mapM extractSchoolContent elements
-                    return (Section title' contents')
-                _ -> Nothing
-        _ -> Nothing
+-- | Extract section content
+extractSectionContent::JsonVal -> Maybe Content
+extractSectionContent (JsonObj secFields) = do
+    -- Get title (might be empty string)
+    let title' = getTitleFromFields secFields
+
+    -- Get content array
+    contentVal <- lookup "content" secFields
+    contents' <- extractContentArray contentVal
+    return (Section title' contents')
+extractSectionContent _ = Nothing
+
+-- | Get title from section fields
+getTitleFromFields::[(String, JsonVal)] -> Maybe String
+getTitleFromFields fields =
+    case lookup "title" fields of
+        Just (JsonStr t) -> Just t
+        _ -> Just ""
+
+-- | Extract content array from JsonVal
+extractContentArray::JsonVal -> Maybe [Content]
+extractContentArray (JsonArr elements) = mapM extractContent elements
+extractContentArray _ = Nothing
 
 -- | Extract codeblock in school format
-extractSchoolCodeblock :: [(String, JsonVal)] -> Maybe Content
-extractSchoolCodeblock fields = do
+extractCodeblock::[(String, JsonVal)] -> Maybe Content
+extractCodeblock fields = do
     codeVal <- lookup "codeblock" fields
     case codeVal of
-        JsonArr elements -> do
-            -- Join array elements into a string
+        JsonArr elements ->
             let codeText = concatMap jsonValToString elements
-            return (CodeBlock codeText)
-        JsonStr code ->
-            -- Direct string
-            return (CodeBlock code)
+            in Just (CodeBlock codeText)
+        JsonStr code -> Just (CodeBlock code)
         _ -> Nothing
 
 -- | Convert JsonVal to string
-jsonValToString :: JsonVal -> String
+jsonValToString::JsonVal -> String
 jsonValToString (JsonStr s) = s
 jsonValToString (JsonNum n) = show n
 jsonValToString (JsonBool True) = "true"
 jsonValToString (JsonBool False) = "false"
 jsonValToString JsonNull = "null"
-jsonValToString (JsonArr arr) =
-    concatMap jsonValToString arr
-jsonValToString (JsonObj _) = ""  -- Skip objects
+jsonValToString (JsonArr arr) = concatMap jsonValToString arr
+jsonValToString (JsonObj _) = ""
 
 -- | Extract list in school format
-extractSchoolList :: [(String, JsonVal)] -> Maybe Content
-extractSchoolList fields = do
+extractList::[(String, JsonVal)] -> Maybe Content
+extractList fields = do
     listVal <- lookup "list" fields
-    case listVal of
-        JsonArr items -> do
-            -- Convert each item to ListItem
-            listItems <- mapM extractSchoolListItem items
-            return (List listItems)
-        _ -> Nothing
+    extractListItems listVal
+
+-- | Extract list items
+extractListItems::JsonVal -> Maybe Content
+extractListItems (JsonArr items) = do
+    listItems <- mapM extractListItem items
+    return (List listItems)
+extractListItems _ = Nothing
 
 -- | Extract list item in school format
-extractSchoolListItem :: JsonVal -> Maybe ListItem
-extractSchoolListItem (JsonArr elements) =
-    -- Array elements are inlines
+extractListItem::JsonVal -> Maybe ListItem
+extractListItem (JsonArr elements) =
     Just (ListItem (mapArrayToInlines elements))
-extractSchoolListItem _ = Nothing
+extractListItem _ = Nothing
 
 -- | Convert array of JSON values to array of Inlines
-mapArrayToInlines :: [JsonVal] -> [Inline]
-mapArrayToInlines [] = []
-mapArrayToInlines (val:rest) =
-    case extractSchoolInline val of
-        Just inline -> inline : mapArrayToInlines rest
-        Nothing -> mapArrayToInlines rest
+mapArrayToInlines::[JsonVal] -> [Inline]
+mapArrayToInlines = foldr processJsonVal []
+  where
+    processJsonVal val acc =
+      case extractInline val of
+          Just inline -> inline : acc
+          Nothing -> acc
 
 -- | Extract inline element in school format
-extractSchoolInline :: JsonVal -> Maybe Inline
-extractSchoolInline (JsonStr s) =
+extractInline::JsonVal -> Maybe Inline
+extractInline (JsonStr s) =
     Just (PlainText s)
-extractSchoolInline (JsonObj fields)
-    | Just bold <- extractSchoolBold fields = Just bold
-    | Just italic <- extractSchoolItalic fields = Just italic
-    | Just code <- extractSchoolCode fields = Just code
-    | Just link <- extractSchoolLink fields = Just link
-    | Just image <- extractSchoolImage fields = Just image
+extractInline (JsonObj fields)
+    | Just bold <- extractBold fields = Just bold
+    | Just italic <- extractItalic fields = Just italic
+    | Just code <- extractCode fields = Just code
+    | Just link <- extractLink fields = Just link
+    | Just image <- extractImage fields = Just image
     | otherwise = Nothing
-extractSchoolInline _ = Nothing
+extractInline _ = Nothing
 
 -- | Extract bold in school format
-extractSchoolBold :: [(String, JsonVal)] -> Maybe Inline
-extractSchoolBold fields = do
-    boldVal <- lookup "bold" fields
-    case boldVal of
-        JsonStr text ->
-            Just (Bold [PlainText text])
-        JsonArr elements ->
-            Just (Bold (mapArrayToInlines elements))
-        _ -> Nothing
+extractBold::[(String, JsonVal)] -> Maybe Inline
+extractBold fields = extractFormattingInline "bold" Bold fields
 
 -- | Extract italic in school format
-extractSchoolItalic :: [(String, JsonVal)] -> Maybe Inline
-extractSchoolItalic fields = do
-    italicVal <- lookup "italic" fields
-    case italicVal of
-        JsonStr text ->
-            Just (Italic [PlainText text])
-        JsonArr elements ->
-            Just (Italic (mapArrayToInlines elements))
+extractItalic::[(String, JsonVal)] -> Maybe Inline
+extractItalic fields = extractFormattingInline "italic" Italic fields
+
+-- | Helper to extract formatting inline elements
+extractFormattingInline::String -> ([Inline] -> Inline) -> [(String, JsonVal)] -> Maybe Inline
+extractFormattingInline key constructor fields = do
+    val <- lookup key fields
+    case val of
+        JsonStr text -> Just (constructor [PlainText text])
+        JsonArr elements -> Just (constructor (mapArrayToInlines elements))
         _ -> Nothing
 
 -- | Extract code in school format
-extractSchoolCode :: [(String, JsonVal)] -> Maybe Inline
-extractSchoolCode fields = do
+extractCode::[(String, JsonVal)] -> Maybe Inline
+extractCode fields = do
     codeVal <- lookup "code" fields
     case codeVal of
         JsonStr text -> Just (Code text)
         _ -> Nothing
 
 -- | Extract link in school format
-extractSchoolLink :: [(String, JsonVal)] -> Maybe Inline
-extractSchoolLink fields = do
+extractLink::[(String, JsonVal)] -> Maybe Inline
+extractLink fields = do
     linkVal <- lookup "link" fields
     case linkVal of
-        JsonObj linkFields -> do
-            url <- extractStringField "url" linkFields
-            contentVal <- lookup "content" linkFields
-            case contentVal of
-                JsonArr elements ->
-                    -- Join array elements into text
-                    let text = concatMap jsonValToString elements
-                    in Just (Link text url)
-                JsonStr text ->
-                    Just (Link text url)
-                _ -> Nothing
+        JsonObj linkFields -> extractLinkFields linkFields
         _ -> Nothing
+
+-- | Extract link fields
+extractLinkFields::[(String, JsonVal)] -> Maybe Inline
+extractLinkFields linkFields = do
+    url <- extractStringField "url" linkFields
+    contentVal <- lookup "content" linkFields
+    let text = extractLinkText contentVal
+    return (Link text url)
+
+-- | Extract link text from content
+extractLinkText::JsonVal -> String
+extractLinkText (JsonArr elements) = concatMap jsonValToString elements
+extractLinkText (JsonStr text) = text
+extractLinkText _ = ""
 
 -- | Extract image in school format
-extractSchoolImage :: [(String, JsonVal)] -> Maybe Inline
-extractSchoolImage fields = do
+extractImage::[(String, JsonVal)] -> Maybe Inline
+extractImage fields = do
     imageVal <- lookup "image" fields
     case imageVal of
-        JsonObj imageFields -> do
-            url <- extractStringField "url" imageFields
-            altVal <- lookup "alt" imageFields
-            case altVal of
-                JsonArr elements ->
-                    -- Join array elements into alt text
-                    let alt = concatMap jsonValToString elements
-                    in Just (Image alt url)
-                JsonStr alt ->
-                    Just (Image alt url)
-                _ -> Nothing
+        JsonObj imageFields -> extractImageFields imageFields
         _ -> Nothing
 
+-- | Extract image fields
+extractImageFields::[(String, JsonVal)] -> Maybe Inline
+extractImageFields imageFields = do
+    url <- extractStringField "url" imageFields
+    altVal <- lookup "alt" imageFields
+    let alt = extractImageAlt altVal
+    return (Image alt url)
+
+-- | Extract image alt text
+extractImageAlt::JsonVal -> String
+extractImageAlt (JsonArr elements) = concatMap jsonValToString elements
+extractImageAlt (JsonStr alt) = alt
+extractImageAlt _ = ""
+
 -- | Extract a string field from JSON object
-extractStringField :: String -> [(String, JsonVal)] -> Maybe String
+extractStringField::String -> [(String, JsonVal)] -> Maybe String
 extractStringField key fields = do
     value <- lookup key fields
     case value of
@@ -242,7 +255,7 @@ extractStringField key fields = do
         _ -> Nothing
 
 -- | Parse a JSON object {key: value, ...}
-parseJsonObject :: Parser [(String, JsonVal)]
+parseJsonObject::Parser [(String, JsonVal)]
 parseJsonObject = do
     char '{'
     skipWhitespace
@@ -252,7 +265,7 @@ parseJsonObject = do
     return pairs
 
 -- | Parse key-value pairs in a JSON object
-parseJsonPairs :: Parser [(String, JsonVal)]
+parseJsonPairs::Parser [(String, JsonVal)]
 parseJsonPairs = do
     input <- currentInput
     if take 1 input == "}"
@@ -260,24 +273,27 @@ parseJsonPairs = do
         else parseJsonPairList
 
 -- | Parse a list of key-value pairs
-parseJsonPairList :: Parser [(String, JsonVal)]
+parseJsonPairList::Parser [(String, JsonVal)]
 parseJsonPairList = do
     pair <- parseJsonPair
     parseRemainingPairs pair
 
 -- | Parse remaining pairs after the first one
-parseRemainingPairs :: (String, JsonVal) -> Parser [(String, JsonVal)]
+parseRemainingPairs::(String, JsonVal) -> Parser [(String, JsonVal)]
 parseRemainingPairs pair = do
     skipWhitespace
     input <- currentInput
-    if null input
-        then return [pair]
-        else if take 1 input == ","
-            then parseNextPair pair
-            else return [pair]
+    handleRemainingPairs pair input
+
+-- | Helper to handle remaining pairs based on input
+handleRemainingPairs::(String, JsonVal) -> String -> Parser [(String, JsonVal)]
+handleRemainingPairs pair input
+    | null input = return [pair]
+    | take 1 input == "," = parseNextPair pair
+    | otherwise = return [pair]
 
 -- | Parse the next pair after a comma
-parseNextPair :: (String, JsonVal) -> Parser [(String, JsonVal)]
+parseNextPair::(String, JsonVal) -> Parser [(String, JsonVal)]
 parseNextPair pair = do
     char ','
     skipWhitespace
@@ -285,7 +301,7 @@ parseNextPair pair = do
     return (pair : rest)
 
 -- | Parse a single key-value pair
-parseJsonPair :: Parser (String, JsonVal)
+parseJsonPair::Parser (String, JsonVal)
 parseJsonPair = do
     skipWhitespace
     key <- parseJsonString
@@ -296,7 +312,7 @@ parseJsonPair = do
     return (key, value)
 
 -- | Parse any JSON value
-parseJsonValue :: Parser JsonVal
+parseJsonValue::Parser JsonVal
 parseJsonValue = do
     skipWhitespace
     input <- currentInput
@@ -305,35 +321,40 @@ parseJsonValue = do
         else parseBasedOnFirstChar input
 
 -- | Parse JSON value based on first character
-parseBasedOnFirstChar :: String -> Parser JsonVal
+parseBasedOnFirstChar::String -> Parser JsonVal
 parseBasedOnFirstChar input =
     case take 1 input of
-        "\"" -> parseJsonString >>= return . JsonStr
-        "[" -> parseJsonArray >>= return . JsonArr
-        "{" -> parseJsonObject >>= return . JsonObj
+        "\"" -> fmap JsonStr parseJsonString
+        "[" -> fmap JsonArr parseJsonArray
+        "{" -> fmap JsonObj parseJsonObject
         "t" -> parseJsonTrue
         "f" -> parseJsonFalse
         "n" -> parseJsonNull
         _ -> parseNumberIfPossible input
 
 -- | Parse a number if possible
-parseNumberIfPossible :: String -> Parser JsonVal
+parseNumberIfPossible::String -> Parser JsonVal
 parseNumberIfPossible input =
-    if not (null input) && isNumberStart (head input)
+    if canBeNumber input
         then parseJsonNumber
         else emptyP
 
+-- | Check if input can be a number
+canBeNumber::String -> Bool
+canBeNumber [] = False
+canBeNumber (c:_) = isNumberStart c
+
 -- | Check if a character can start a number
-isNumberStart :: Char -> Bool
+isNumberStart::Char -> Bool
 isNumberStart c = isDigit c || c == '-' || c == '.'
 
 -- | Check if a character can be part of a number
-isNumberChar :: Char -> Bool
+isNumberChar::Char -> Bool
 isNumberChar c = isDigit c || c == '.' ||
                  c == '-' || c == '+' || c == 'e' || c == 'E'
 
 -- | Parse a JSON string with proper escaping
-parseJsonString :: Parser String
+parseJsonString::Parser String
 parseJsonString = do
     char '"'
     content <- parseJsonStringContent
@@ -341,12 +362,12 @@ parseJsonString = do
     return content
 
 -- | Parse the content of a JSON string
-parseJsonStringContent :: Parser String
+parseJsonStringContent::Parser String
 parseJsonStringContent = Parser $ \input ->
     parseStringHelper "" input
 
 -- | Helper function for parsing string content with escapes
-parseStringHelper :: String -> String -> ParseResult String
+parseStringHelper::String -> String -> ParseResult String
 parseStringHelper acc "" = Nothing
 parseStringHelper acc ('"':rest) = Just (reverse acc, '"':rest)
 parseStringHelper acc ('\\':'"':rest) = parseStringHelper ('"':acc) rest
@@ -358,7 +379,7 @@ parseStringHelper acc ('\\':c:rest) = parseStringHelper (c:acc) rest
 parseStringHelper acc (c:rest) = parseStringHelper (c:acc) rest
 
 -- | Parse a JSON array [value, value, ...]
-parseJsonArray :: Parser [JsonVal]
+parseJsonArray::Parser [JsonVal]
 parseJsonArray = do
     char '['
     skipWhitespace
@@ -368,7 +389,7 @@ parseJsonArray = do
     return items
 
 -- | Parse items in a JSON array
-parseJsonArrayItems :: Parser [JsonVal]
+parseJsonArrayItems::Parser [JsonVal]
 parseJsonArrayItems = do
     input <- currentInput
     if take 1 input == "]"
@@ -376,50 +397,46 @@ parseJsonArrayItems = do
         else parseJsonItemList
 
 -- | Parse a list of array items
-parseJsonItemList :: Parser [JsonVal]
+parseJsonItemList::Parser [JsonVal]
 parseJsonItemList = do
     item <- parseJsonValue
-    parseItemRest item
+    parseItemRest [item]
 
--- | Parse the rest of the items after the first one
-parseItemRest :: JsonVal -> Parser [JsonVal]
-parseItemRest item = do
+parseItemRest::[JsonVal] -> Parser [JsonVal]
+parseItemRest items = do
     skipWhitespace
     input <- currentInput
-    if null input
-        then return [item]
-        else if take 1 input == ","
-            then parseNextItem item
-            else return [item]
+    handleItemRest items input
 
--- | Parse the next item after a comma
-parseNextItem :: JsonVal -> Parser [JsonVal]
-parseNextItem item = do
+-- | Helper to handle the rest of an array item based on input
+handleItemRest::[JsonVal] -> String -> Parser [JsonVal]
+handleItemRest items input
+    | null input = return items
+    | take 1 input == "," = parseNextItems items
+    | otherwise = return items
+
+-- | Parse the next items after a comma
+parseNextItems::[JsonVal] -> Parser [JsonVal]
+parseNextItems items = do
     char ','
     skipWhitespace
-    rest <- parseJsonArrayItems
-    return (item : rest)
+    item <- parseJsonValue
+    parseItemRest (items ++ [item])
 
 -- | Parse JSON true value
-parseJsonTrue :: Parser JsonVal
-parseJsonTrue =
-    stringP "true" >>
-    return (JsonBool True)
+parseJsonTrue::Parser JsonVal
+parseJsonTrue = stringP "true" >> return (JsonBool True)
 
 -- | Parse JSON false value
-parseJsonFalse :: Parser JsonVal
-parseJsonFalse =
-    stringP "false" >>
-    return (JsonBool False)
+parseJsonFalse::Parser JsonVal
+parseJsonFalse = stringP "false" >> return (JsonBool False)
 
 -- | Parse JSON null value
-parseJsonNull :: Parser JsonVal
-parseJsonNull =
-    stringP "null" >>
-    return JsonNull
+parseJsonNull::Parser JsonVal
+parseJsonNull = stringP "null" >> return JsonNull
 
 -- | Parse a JSON number
-parseJsonNumber :: Parser JsonVal
+parseJsonNumber::Parser JsonVal
 parseJsonNumber = Parser $ \input ->
     let (numStr, rest) = span isNumberChar input
     in if null numStr
@@ -427,7 +444,7 @@ parseJsonNumber = Parser $ \input ->
        else Just (JsonNum (safeRead numStr), rest)
 
 -- | Safe read function for numbers
-safeRead :: String -> Double
+safeRead::String -> Double
 safeRead str =
     case reads str of
         [(num, "")] -> num

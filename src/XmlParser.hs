@@ -2,7 +2,7 @@
 -- EPITECH PROJECT, 2024
 -- XmlParser.hs
 -- File description:
--- XML Parser implementation for document conversion (school format compatible)
+-- XML Parser
 -}
 
 module XmlParser
@@ -13,13 +13,16 @@ import ParsingLibrary
 import Document
 import Data.Char (isAlphaNum)
 
--- | Parse a complete XML document
-parseXml :: Parser Document
-parseXml = do
+parseXml::Parser Document
+parseXml =
+    skipWhitespace >>
+    stringP "<document>" >>
+    parseDocumentContent
+
+parseDocumentContent::Parser Document
+parseDocumentContent = do
     skipWhitespace
-    stringP "<document>"
-    skipWhitespace
-    header' <- parseSchoolHeader
+    header' <- parseEPITECHHeader
     skipWhitespace
     content' <- parseDocumentBody
     skipWhitespace
@@ -27,49 +30,48 @@ parseXml = do
     skipWhitespace
     return (Document header' content')
 
--- | Parse header in school format (with nested author and date)
-parseSchoolHeader :: Parser Header
-parseSchoolHeader = do
-    skipWhitespace
-    stringP "<header"
-    skipWhitespace
+parseEPITECHHeader::Parser Header
+parseEPITECHHeader = do
+    parseHeaderTag
     attrs <- parseAttributes
     skipWhitespace
     char '>'
-    skipWhitespace
-
-    -- Try to parse author element
-    authorOpt <- optionP Nothing (parseAuthorElement)
-    skipWhitespace
-
-    -- Try to parse date element
-    dateOpt <- optionP Nothing (parseDateElement)
-    skipWhitespace
-
-    stringP "</header>"
-
-    -- Get title from attributes
+    headerElements <- parseHeaderElements
     let title' = findAttr "title" attrs ""
+    return (Header title' (fst headerElements) (snd headerElements))
 
-    return (Header title' authorOpt dateOpt)
+parseHeaderTag::Parser ()
+parseHeaderTag =
+    skipWhitespace >>
+    stringP "<header" >>
+    skipWhitespace >>
+    return ()
 
--- | Parse author element
-parseAuthorElement :: Parser (Maybe String)
+parseHeaderElements::Parser (Maybe String, Maybe String)
+parseHeaderElements = do
+    skipWhitespace
+    authorOpt <- optionP Nothing parseAuthorElement
+    skipWhitespace
+    dateOpt <- optionP Nothing parseDateElement
+    skipWhitespace
+    stringP "</header>"
+    return (authorOpt, dateOpt)
+
+parseAuthorElement::Parser (Maybe String)
 parseAuthorElement = do
     stringP "<author>"
     author <- manyP (satisfy (/= '<'))
     stringP "</author>"
     return (Just author)
 
--- | Parse date element
-parseDateElement :: Parser (Maybe String)
+parseDateElement::Parser (Maybe String)
 parseDateElement = do
     stringP "<date>"
     date <- manyP (satisfy (/= '<'))
     stringP "</date>"
     return (Just date)
 
-parseDocumentBody :: Parser [Content]
+parseDocumentBody::Parser [Content]
 parseDocumentBody = do
     stringP "<body>"
     skipWhitespace
@@ -77,10 +79,10 @@ parseDocumentBody = do
     stringP "</body>"
     return contents
 
-parseAttributes :: Parser [(String, String)]
+parseAttributes::Parser [(String, String)]
 parseAttributes = manyP parseAttribute
 
-parseAttribute :: Parser (String, String)
+parseAttribute::Parser (String, String)
 parseAttribute = do
     skipWhitespace
     name <- parseAttributeName
@@ -92,25 +94,25 @@ parseAttribute = do
     char '"'
     return (name, value)
 
-isAttributeNameChar :: Char -> Bool
+isAttributeNameChar::Char -> Bool
 isAttributeNameChar c = isAlphaNum c || c == '_' || c == '-'
 
-parseAttributeName :: Parser String
+parseAttributeName::Parser String
 parseAttributeName = someP (satisfy isAttributeNameChar)
 
-findAttr :: String -> [(String, String)] -> String -> String
+findAttr::String -> [(String, String)] -> String -> String
 findAttr name attrs defaultValue =
     case lookup name attrs of
         Just value -> value
         Nothing -> defaultValue
 
-parseContent :: Parser Content
+parseContent::Parser Content
 parseContent = parseParagraph `orElse`
               parseSection `orElse`
               parseCodeBlock `orElse`
               parseList
 
-parseParagraph :: Parser Content
+parseParagraph::Parser Content
 parseParagraph = do
     skipWhitespace
     stringP "<paragraph>"
@@ -118,22 +120,30 @@ parseParagraph = do
     stringP "</paragraph>"
     return (Paragraph inlines)
 
--- | Parse a section element
-parseSection :: Parser Content
+parseSection::Parser Content
 parseSection = do
+    sectionAttrs <- parseSectionTag
+    skipWhitespace
+    contents <- parseSectionContents
+    return (Section (lookup "title" sectionAttrs) contents)
+
+parseSectionTag::Parser [(String, String)]
+parseSectionTag = do
     skipWhitespace
     stringP "<section"
     skipWhitespace
     attrs <- parseAttributes
     skipWhitespace
     char '>'
-    skipWhitespace
+    return attrs
+
+parseSectionContents::Parser [Content]
+parseSectionContents = do
     contents <- manyP (parseContent <* skipWhitespace)
     stringP "</section>"
-    return (Section (lookup "title" attrs) contents)
+    return contents
 
--- | Parse a code block element
-parseCodeBlock :: Parser Content
+parseCodeBlock::Parser Content
 parseCodeBlock = do
     skipWhitespace
     stringP "<codeblock>"
@@ -143,15 +153,13 @@ parseCodeBlock = do
     let codeStr = contentToString codeContents
     return (CodeBlock codeStr)
 
--- | Convert content to string representation
-contentToString :: [Content] -> String
+contentToString::[Content] -> String
 contentToString [] = ""
 contentToString (Paragraph inlines:rest) =
     concatMap inlineToString inlines ++ "\n" ++ contentToString rest
 contentToString (_:rest) = contentToString rest
 
--- | Convert inline to string
-inlineToString :: Inline -> String
+inlineToString::Inline -> String
 inlineToString (PlainText text) = text
 inlineToString (Bold inlines) = concatMap inlineToString inlines
 inlineToString (Italic inlines) = concatMap inlineToString inlines
@@ -159,7 +167,7 @@ inlineToString (Code text) = text
 inlineToString (Link text _) = text
 inlineToString (Image alt _) = alt
 
-parseList :: Parser Content
+parseList::Parser Content
 parseList = do
     skipWhitespace
     stringP "<list>"
@@ -169,53 +177,52 @@ parseList = do
     stringP "</list>"
     return (List items)
 
-paragraphToListItem :: Content -> ListItem
+paragraphToListItem::Content -> ListItem
 paragraphToListItem (Paragraph inlines) = ListItem inlines
 paragraphToListItem _ = ListItem [PlainText ""]
 
-parseInlines :: Parser [Inline]
+parseInlines::Parser [Inline]
 parseInlines = manyP parseInline
 
-parseInline :: Parser Inline
+parseInline::Parser Inline
 parseInline = parsePlainText `orElse` parseFormattedInline
 
-parseFormattedInline :: Parser Inline
+parseFormattedInline::Parser Inline
 parseFormattedInline =
     parseBold `orElse`
     parseItalic `orElse`
     parseCode `orElse`
-    parseSchoolLink `orElse`
-    parseSchoolImage
+    parseEPITECHLink `orElse`
+    parseEPITECHImage
 
-parsePlainText :: Parser Inline
+parsePlainText::Parser Inline
 parsePlainText = Parser $ \input ->
     let (text, rest) = span (/= '<') input
     in if null text then Nothing else Just (PlainText text, rest)
 
-parseBold :: Parser Inline
+parseBold::Parser Inline
 parseBold = do
     stringP "<bold>"
     inlines <- parseInlines
     stringP "</bold>"
     return (Bold inlines)
 
-parseItalic :: Parser Inline
+parseItalic::Parser Inline
 parseItalic = do
     stringP "<italic>"
     inlines <- parseInlines
     stringP "</italic>"
     return (Italic inlines)
 
-parseCode :: Parser Inline
+parseCode::Parser Inline
 parseCode = do
     stringP "<code>"
     text <- manyP (satisfy (/= '<'))
     stringP "</code>"
     return (Code text)
 
--- | Parse link (school format with url attribute)
-parseSchoolLink :: Parser Inline
-parseSchoolLink = do
+parseEPITECHLink::Parser Inline
+parseEPITECHLink = do
     stringP "<link"
     skipWhitespace
     attrs <- parseAttributes
@@ -226,9 +233,8 @@ parseSchoolLink = do
     let url = findAttr "url" attrs ""
     return (Link text url)
 
--- | Parse image (school format with content and url attribute)
-parseSchoolImage :: Parser Inline
-parseSchoolImage = do
+parseEPITECHImage::Parser Inline
+parseEPITECHImage = do
     stringP "<image"
     skipWhitespace
     attrs <- parseAttributes
