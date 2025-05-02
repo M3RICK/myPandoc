@@ -2,7 +2,7 @@
 -- EPITECH PROJECT, 2024
 -- XmlParser.hs
 -- File description:
--- XML Parser implementation for document conversion
+-- XML Parser implementation for document conversion (school format compatible)
 -}
 
 module XmlParser
@@ -15,116 +15,101 @@ import Data.Char (isAlphaNum)
 
 -- | Parse a complete XML document
 parseXml :: Parser Document
-parseXml =
-    skipWhitespace >>
-    stringP "<document>" >>
-    parseDocumentContent
-
--- | Parse document content (after opening tag)
-parseDocumentContent :: Parser Document
-parseDocumentContent = do
+parseXml = do
     skipWhitespace
-    header' <- parseHeader
+    stringP "<document>"
+    skipWhitespace
+    header' <- parseSchoolHeader
     skipWhitespace
     content' <- parseDocumentBody
-    parseDocumentEnd
+    skipWhitespace
+    stringP "</document>"
+    skipWhitespace
     return (Document header' content')
 
--- | Parse document end tag
-parseDocumentEnd :: Parser ()
-parseDocumentEnd =
-    skipWhitespace >>
-    stringP "</document>" >>
-    skipWhitespace >>
-    return ()
+-- | Parse header in school format (with nested author and date)
+parseSchoolHeader :: Parser Header
+parseSchoolHeader = do
+    skipWhitespace
+    stringP "<header"
+    skipWhitespace
+    attrs <- parseAttributes
+    skipWhitespace
+    char '>'
+    skipWhitespace
 
--- | Parse document body
+    -- Try to parse author element
+    authorOpt <- optionP Nothing (parseAuthorElement)
+    skipWhitespace
+
+    -- Try to parse date element
+    dateOpt <- optionP Nothing (parseDateElement)
+    skipWhitespace
+
+    stringP "</header>"
+
+    -- Get title from attributes
+    let title' = findAttr "title" attrs ""
+
+    return (Header title' authorOpt dateOpt)
+
+-- | Parse author element
+parseAuthorElement :: Parser (Maybe String)
+parseAuthorElement = do
+    stringP "<author>"
+    author <- manyP (satisfy (/= '<'))
+    stringP "</author>"
+    return (Just author)
+
+-- | Parse date element
+parseDateElement :: Parser (Maybe String)
+parseDateElement = do
+    stringP "<date>"
+    date <- manyP (satisfy (/= '<'))
+    stringP "</date>"
+    return (Just date)
+
 parseDocumentBody :: Parser [Content]
 parseDocumentBody = do
     stringP "<body>"
     skipWhitespace
-    contents <- parseBodyContents
+    contents <- manyP (parseContent <* skipWhitespace)
     stringP "</body>"
     return contents
 
--- | Parse body contents
-parseBodyContents :: Parser [Content]
-parseBodyContents = manyP (parseContent <* skipWhitespace)
-
--- | Create Header from attributes
-createHeader :: [(String, String)] -> Header
-createHeader attrs =
-    let title' = findAttr "title" attrs ""
-        author' = lookup "author" attrs
-        date' = lookup "date" attrs
-    in Header title' author' date'
-
--- | Parse XML header tag and contents
-parseHeader :: Parser Header
-parseHeader =
-    skipWhitespace >>
-    stringP "<header" >>
-    parseHeaderAttributes
-
--- | Parse header attributes and closing tag
-parseHeaderAttributes :: Parser Header
-parseHeaderAttributes = do
-    skipWhitespace
-    attrs <- parseAttributes
-    skipWhitespace
-    stringP "></header>"
-    return (createHeader attrs)
-
--- | Parse attributes in an XML tag
 parseAttributes :: Parser [(String, String)]
 parseAttributes = manyP parseAttribute
 
--- | Parse a single attribute (name="value")
 parseAttribute :: Parser (String, String)
 parseAttribute = do
     skipWhitespace
     name <- parseAttributeName
-    parseAttributeEquals name
-
--- | Parse the equals sign and value of an attribute
-parseAttributeEquals :: String -> Parser (String, String)
-parseAttributeEquals name =
-    skipWhitespace >>
-    char '=' >>
-    skipWhitespace >>
-    parseAttributeValue name
-
--- | Parse attribute value in quotes
-parseAttributeValue :: String -> Parser (String, String)
-parseAttributeValue name = do
+    skipWhitespace
+    char '='
+    skipWhitespace
     char '"'
     value <- manyP (satisfy (/= '"'))
     char '"'
     return (name, value)
 
--- | Is character valid in an attribute name?
 isAttributeNameChar :: Char -> Bool
 isAttributeNameChar c = isAlphaNum c || c == '_' || c == '-'
 
--- | Parse attribute name
 parseAttributeName :: Parser String
 parseAttributeName = someP (satisfy isAttributeNameChar)
 
--- | Get attribute value with default
 findAttr :: String -> [(String, String)] -> String -> String
 findAttr name attrs defaultValue =
     case lookup name attrs of
         Just value -> value
         Nothing -> defaultValue
 
--- | Parse a content element
 parseContent :: Parser Content
 parseContent = parseParagraph `orElse`
               parseSection `orElse`
               parseCodeBlock `orElse`
               parseList
 
--- | Parse a paragraph element
 parseParagraph :: Parser Content
 parseParagraph = do
     skipWhitespace
@@ -133,20 +118,15 @@ parseParagraph = do
     stringP "</paragraph>"
     return (Paragraph inlines)
 
--- | Parse a section element - opening tag and attributes
+-- | Parse a section element
 parseSection :: Parser Content
 parseSection = do
     skipWhitespace
     stringP "<section"
     skipWhitespace
     attrs <- parseAttributes
-    parseSectionContent attrs
-
--- | Parse section content and closing tag
-parseSectionContent :: [(String, String)] -> Parser Content
-parseSectionContent attrs = do
     skipWhitespace
-    stringP ">"
+    char '>'
     skipWhitespace
     contents <- manyP (parseContent <* skipWhitespace)
     stringP "</section>"
@@ -157,80 +137,61 @@ parseCodeBlock :: Parser Content
 parseCodeBlock = do
     skipWhitespace
     stringP "<codeblock>"
-    code <- parseTextUntil "</codeblock>"
+    skipWhitespace
+    codeContents <- manyP (parseContent <* skipWhitespace)
     stringP "</codeblock>"
-    return (CodeBlock code)
+    let codeStr = contentToString codeContents
+    return (CodeBlock codeStr)
 
--- | Parse text until a specific closing tag
-parseTextUntil :: String -> Parser String
-parseTextUntil endTag = Parser $ \input ->
-    let (content, rest) = breakAtTag input endTag
-    in if take (length endTag) rest == endTag
-       then Just (content, rest)
-       else Nothing
+-- | Convert content to string representation
+contentToString :: [Content] -> String
+contentToString [] = ""
+contentToString (Paragraph inlines:rest) =
+    concatMap inlineToString inlines ++ "\n" ++ contentToString rest
+contentToString (_:rest) = contentToString rest
 
--- | Helper to break a string at a tag
-breakAtTag :: String -> String -> (String, String)
-breakAtTag input tag =
-    let idx = findTagIndex input tag 0
-    in splitAt idx input
+-- | Convert inline to string
+inlineToString :: Inline -> String
+inlineToString (PlainText text) = text
+inlineToString (Bold inlines) = concatMap inlineToString inlines
+inlineToString (Italic inlines) = concatMap inlineToString inlines
+inlineToString (Code text) = text
+inlineToString (Link text _) = text
+inlineToString (Image alt _) = alt
 
--- | Find index of a tag in a string
-findTagIndex :: String -> String -> Int -> Int
-findTagIndex [] _ _ = 0
-findTagIndex str tag idx
-    | take (length tag) str == tag = idx
-    | null str = 0
-    | otherwise = findTagIndex (tail str) tag (idx + 1)
-
--- | Parse a list element
 parseList :: Parser Content
-parseList =
-    skipWhitespace >>
-    stringP "<list>" >>
-    skipWhitespace >>
-    parseListItems
-
--- | Parse list items and closing tag
-parseListItems :: Parser Content
-parseListItems = do
-    items <- manyP (parseListItem <* skipWhitespace)
+parseList = do
+    skipWhitespace
+    stringP "<list>"
+    skipWhitespace
+    paragraphs <- manyP (parseParagraph <* skipWhitespace)
+    let items = map paragraphToListItem paragraphs
     stringP "</list>"
     return (List items)
 
--- | Parse a list item
-parseListItem :: Parser ListItem
-parseListItem = do
-    skipWhitespace
-    stringP "<item>"
-    inlines <- parseInlines
-    stringP "</item>"
-    return (ListItem inlines)
+paragraphToListItem :: Content -> ListItem
+paragraphToListItem (Paragraph inlines) = ListItem inlines
+paragraphToListItem _ = ListItem [PlainText ""]
 
--- | Parse inline elements
 parseInlines :: Parser [Inline]
 parseInlines = manyP parseInline
 
--- | Parse a single inline element
 parseInline :: Parser Inline
 parseInline = parsePlainText `orElse` parseFormattedInline
 
--- | Parse formatted inline elements
 parseFormattedInline :: Parser Inline
 parseFormattedInline =
     parseBold `orElse`
     parseItalic `orElse`
     parseCode `orElse`
-    parseLink `orElse`
-    parseImage
+    parseSchoolLink `orElse`
+    parseSchoolImage
 
--- | Parse plain text
 parsePlainText :: Parser Inline
 parsePlainText = Parser $ \input ->
     let (text, rest) = span (/= '<') input
     in if null text then Nothing else Just (PlainText text, rest)
 
--- | Parse bold text
 parseBold :: Parser Inline
 parseBold = do
     stringP "<bold>"
@@ -238,7 +199,6 @@ parseBold = do
     stringP "</bold>"
     return (Bold inlines)
 
--- | Parse italic text
 parseItalic :: Parser Inline
 parseItalic = do
     stringP "<italic>"
@@ -246,43 +206,35 @@ parseItalic = do
     stringP "</italic>"
     return (Italic inlines)
 
--- | Parse code inline
 parseCode :: Parser Inline
 parseCode = do
     stringP "<code>"
-    code <- parseTextUntil "</code>"
+    text <- manyP (satisfy (/= '<'))
     stringP "</code>"
-    return (Code code)
+    return (Code text)
 
--- | Parse link opening tag and attributes
-parseLink :: Parser Inline
-parseLink = do
+-- | Parse link (school format with url attribute)
+parseSchoolLink :: Parser Inline
+parseSchoolLink = do
     stringP "<link"
     skipWhitespace
     attrs <- parseAttributes
-    parseLinkContent attrs
-
--- | Parse link content and closing tag
-parseLinkContent :: [(String, String)] -> Parser Inline
-parseLinkContent attrs = do
     skipWhitespace
-    stringP ">"
-    text <- parseTextUntil "</link>"
+    char '>'
+    text <- manyP (satisfy (/= '<'))
     stringP "</link>"
-    let url = findAttr "href" attrs ""
+    let url = findAttr "url" attrs ""
     return (Link text url)
 
--- | Parse image
-parseImage :: Parser Inline
-parseImage = do
+-- | Parse image (school format with content and url attribute)
+parseSchoolImage :: Parser Inline
+parseSchoolImage = do
     stringP "<image"
     skipWhitespace
     attrs <- parseAttributes
-    parseImageEnd attrs
-
--- | Parse image end tag
-parseImageEnd :: [(String, String)] -> Parser Inline
-parseImageEnd attrs =
-    skipWhitespace >>
-    stringP "></image>" >>
-    return (Image (findAttr "alt" attrs "") (findAttr "src" attrs ""))
+    skipWhitespace
+    char '>'
+    alt <- manyP (satisfy (/= '<'))
+    stringP "</image>"
+    let url = findAttr "url" attrs ""
+    return (Image alt url)
