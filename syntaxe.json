@@ -1,0 +1,112 @@
+{
+    "header": {
+        "title": "Syntaxe JSON",
+        "author": "Fornes Leo",
+        "date": "2024-01-01"
+    },
+    "body": [
+        [
+            "This document is a simple example of the JSON syntax."
+        ],
+        [
+            "Every syntax element is displayed in this document."
+        ],
+        {
+            "section": {
+                "title": "header 1",
+                "content": [
+                    [
+                        "This is a basic paragraph with text."
+                    ],
+                    [
+                        "This is a paragraph with ",
+                        {
+                            "bold": "bold"
+                        },
+                        ", ",
+                        {
+                            "italic": "italic"
+                        },
+                        " and ",
+                        {
+                            "code": "code"
+                        },
+                        " text."
+                    ],
+                    {
+                        "section": {
+                            "title": "header 2",
+                            "content": [
+                                {
+                                    "codeblock": [
+                                        "This is a code block."
+                                    ]
+                                },
+                                {
+                                    "list": [
+                                        [
+                                            "list item 1"
+                                        ],
+                                        [
+                                            "list item 2"
+                                        ],
+                                        [
+                                            "list item 3"
+                                        ]
+                                    ]
+                                },
+                                [
+                                    "This is a paragraph with a ",
+                                    {
+                                        "link": {
+                                            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ&ab_channel=RickAstley",
+                                            "content": [
+                                                "link"
+                                            ]
+                                        }
+                                    },
+                                    "."
+                                ],
+                                [
+                                    "This is a paragraph with an image ",
+                                    {
+                                        "image": {
+                                            "url": "https://cdn-images-1.medium.com/max/697/1*tsHrUKwQXG1YZX0l957ISw.png",
+                                            "alt": [
+                                                "Text to replace image"
+                                            ]
+                                        }
+                                    },
+                                    "."
+                                ],
+                                {
+                                    "section": {
+                                        "title": "",
+                                        "content": [
+                                            {
+                                                "section": {
+                                                    "title": "header 4",
+                                                    "content": [
+                                                        [
+                                                            "Every syntax element can be use separately or combined."
+                                                        ],
+                                                        [
+                                                            "Think about the different possible combinations."
+                                                        ],
+                                                        [
+                                                            "All combined syntax elements aren't displayed in this document."
+                                                        ]
+                                                    ]
+                                                }
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}

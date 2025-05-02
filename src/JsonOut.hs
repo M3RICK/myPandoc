@@ -18,7 +18,7 @@ documentToJson (Document hdr body) =
     "  \"header\": " ++ headerToJson hdr ++ ",\n" ++
     "  \"body\": [\n    " ++
     concatMap contentToJson body ++
-    "  ]\n" ++
+    "\n  ]\n" ++
     "}"
 
 -- | Convert Header to JSON
@@ -31,25 +31,32 @@ headerToJson (Header title author date) =
     "\n  }"
 
 -- | Convert Content to JSON with proper indentation
+-- Fix: Remove trailing commas that make the JSON invalid
 contentToJson :: Content -> String
 contentToJson (Paragraph inlines) =
-    "{\n      \"paragraph\": [" ++ 
+    "{\n      \"paragraph\": [" ++
     inlinesToJson inlines ++
-    "]\n    },\n    "
+    "]\n    }" -- Removed comma
 contentToJson (Section title contents) =
     "{\n      \"section\": {\n" ++
-    "        \"title\": " ++ 
-    maybe "null" (\t -> "\"" ++ escapeJson t ++ "\"") title ++ 
+    "        \"title\": " ++
+    maybe "null" (\t -> "\"" ++ escapeJson t ++ "\"") title ++
     ",\n" ++
-    "        \"contents\": [\n          " ++
-    concatMap contentToJson contents ++
-    "        ]\n      }\n    },\n    "
+    "        \"content\": [\n          " ++
+    concatMapWithSeparator contentToJson contents ++
+    "\n        ]\n      }\n    }" -- Removed comma
 contentToJson (CodeBlock code) =
-    "{\n      \"codeblock\": \"" ++ escapeJson code ++ "\"\n    },\n    "
+    "{\n      \"codeblock\": \"" ++ escapeJson code ++ "\"\n    }" -- Removed comma
 contentToJson (List items) =
     "{\n      \"list\": [\n        " ++
-    concatMap listItemToJson items ++
-    "      ]\n    },\n    "
+    concatMapWithSeparator listItemToJson items ++
+    "\n      ]\n    }" -- Removed comma
+
+-- | Helper function to join items with commas but no trailing comma
+concatMapWithSeparator :: (a -> String) -> [a] -> String
+concatMapWithSeparator _ [] = ""
+concatMapWithSeparator f [x] = f x
+concatMapWithSeparator f (x:xs) = f x ++ ",\n          " ++ concatMapWithSeparator f xs
 
 -- | Convert a list of Inline elements to JSON array
 inlinesToJson :: [Inline] -> String
@@ -60,35 +67,36 @@ inlinesToJson (x:xs) = inlineToJson x ++ ", " ++ inlinesToJson xs
 -- | Convert Inline to JSON
 inlineToJson :: Inline -> String
 inlineToJson (PlainText text) = "\"" ++ escapeJson text ++ "\""
-inlineToJson (Bold inlines) = 
-    "{\n        \"bold\": [" ++ 
+inlineToJson (Bold inlines) =
+    "{\n        \"bold\": [" ++
     inlinesToJson inlines ++
     "]\n      }"
-inlineToJson (Italic inlines) = 
-    "{\n        \"italic\": [" ++ 
+inlineToJson (Italic inlines) =
+    "{\n        \"italic\": [" ++
     inlinesToJson inlines ++
     "]\n      }"
-inlineToJson (Code text) = 
-    "{\n        \"code\": \"" ++ 
-    escapeJson text ++ 
+inlineToJson (Code text) =
+    "{\n        \"code\": \"" ++
+    escapeJson text ++
     "\"\n      }"
-inlineToJson (Link text url) = 
+inlineToJson (Link text url) =
     "{\n        \"link\": {\n" ++
     "          \"text\": \"" ++ escapeJson text ++ "\",\n" ++
     "          \"url\": \"" ++ escapeJson url ++ "\"\n" ++
     "        }\n      }"
-inlineToJson (Image alt url) = 
+inlineToJson (Image alt url) =
     "{\n        \"image\": {\n" ++
     "          \"alt\": \"" ++ escapeJson alt ++ "\",\n" ++
     "          \"url\": \"" ++ escapeJson url ++ "\"\n" ++
     "        }\n      }"
 
 -- | Convert ListItem to JSON
+-- Fix: Remove trailing comma
 listItemToJson :: ListItem -> String
 listItemToJson (ListItem inlines) =
-    "{\n          \"item\": [" ++ 
+    "{\n          \"item\": [" ++
     inlinesToJson inlines ++
-    "]\n        },\n        "
+    "]\n        }" -- Removed comma
 
 -- | Escape special JSON characters
 escapeJson :: String -> String
