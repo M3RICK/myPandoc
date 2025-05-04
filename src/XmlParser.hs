@@ -21,25 +21,25 @@ parseXml =
 
 parseDocumentContent::Parser Document
 parseDocumentContent = do
-    skipWhitespace
+    _ <- skipWhitespace
     header' <- parseEPITECHHeader
-    skipWhitespace
+    _ <- skipWhitespace
     content' <- parseDocumentBody
-    skipWhitespace
-    stringP "</document>"
-    skipWhitespace
+    _ <- skipWhitespace
+    _ <- stringP "</document>"
+    _ <- skipWhitespace
     return (Document header' content')
 
 parseEPITECHHeader::Parser Header
 parseEPITECHHeader = do
-    skipWhitespace
-    stringP "<header"
-    skipWhitespace
+    _ <- skipWhitespace
+    _ <- stringP "<header"
+    _ <- skipWhitespace
     attrs <- parseAttributes
-    skipWhitespace
-    stringP ">"
-    skipWhitespace
-    stringP "</header>"
+    _ <- skipWhitespace
+    _ <- stringP ">"
+    _ <- skipWhitespace
+    _ <- stringP "</header>"
     let title' = findAttr "title" attrs ""
     let author' = findAttrOpt "author" attrs
     let date' = findAttrOpt "date" attrs
@@ -53,10 +53,10 @@ findAttrOpt name attrs =
 
 parseDocumentBody::Parser [Content]
 parseDocumentBody = do
-    stringP "<body>"
-    skipWhitespace
+    _ <- stringP "<body>"
+    _ <- skipWhitespace
     contents <- manyP (parseContent <* skipWhitespace)
-    stringP "</body>"
+    _ <- stringP "</body>"
     return contents
 
 parseAttributes::Parser [(String, String)]
@@ -64,14 +64,14 @@ parseAttributes = manyP parseAttribute
 
 parseAttribute::Parser (String, String)
 parseAttribute = do
-    skipWhitespace
+    _ <- skipWhitespace
     name <- parseAttributeName
-    skipWhitespace
-    char '='
-    skipWhitespace
-    char '"'
+    _ <- skipWhitespace
+    _ <- char '='
+    _ <- skipWhitespace
+    _ <- char '"'
     value <- manyP (satisfy (/= '"'))
-    char '"'
+    _ <- char '"'
     return (name, value)
 
 isAttributeNameChar::Char -> Bool
@@ -95,58 +95,58 @@ parseContent =
 
 parseParagraph::Parser Content
 parseParagraph = do
-    skipWhitespace
-    stringP "<paragraph>"
+    _ <- skipWhitespace
+    _ <- stringP "<paragraph>"
     inlines <- parseInlines
-    stringP "</paragraph>"
+    _ <- stringP "</paragraph>"
     return (Paragraph inlines)
 
 parseSection::Parser Content
 parseSection = do
     sectionAttrs <- parseSectionTag
-    skipWhitespace
+    _ <- skipWhitespace
     contents <- parseSectionContents
     return (Section (lookup "title" sectionAttrs) contents)
 
 parseSectionTag::Parser [(String, String)]
 parseSectionTag = do
-    skipWhitespace
-    stringP "<section"
-    skipWhitespace
+    _ <- skipWhitespace
+    _ <- stringP "<section"
+    _ <- skipWhitespace
     attrs <- parseAttributes
-    skipWhitespace
-    char '>'
+    _ <- skipWhitespace
+    _ <- char '>'
     return attrs
 
 parseSectionContents::Parser [Content]
 parseSectionContents = do
     contents <- manyP (parseContent <* skipWhitespace)
-    stringP "</section>"
+    _ <- stringP "</section>"
     return contents
 
 parseCodeBlock::Parser Content
 parseCodeBlock = do
-    skipWhitespace
-    stringP "<codeblock>"
+    _ <- skipWhitespace
+    _ <- stringP "<codeblock>"
     code <- manyP (satisfy (/= '<'))
-    stringP "</codeblock>"
+    _ <- stringP "</codeblock>"
     return (CodeBlock code)
 
 parseList::Parser Content
 parseList = do
-    skipWhitespace
-    stringP "<list>"
-    skipWhitespace
+    _ <- skipWhitespace
+    _ <- stringP "<list>"
+    _ <- skipWhitespace
     items <- manyP (parseListItem <* skipWhitespace)
-    stringP "</list>"
+    _ <- stringP "</list>"
     return (List items)
 
 parseListItem::Parser ListItem
 parseListItem = do
-    skipWhitespace
-    stringP "<item>"
+    _ <- skipWhitespace
+    _ <- stringP "<item>"
     inlines <- parseInlines
-    stringP "</item>"
+    _ <- stringP "</item>"
     return (ListItem inlines)
 
 parseInlines::Parser [Inline]
@@ -170,46 +170,46 @@ parsePlainText = Parser $ \input ->
 
 parseBold::Parser Inline
 parseBold = do
-    stringP "<bold>"
+    _ <- stringP "<bold>"
     inlines <- parseInlines
-    stringP "</bold>"
+    _ <- stringP "</bold>"
     return (Bold inlines)
 
 parseItalic::Parser Inline
 parseItalic = do
-    stringP "<italic>"
+    _ <- stringP "<italic>"
     inlines <- parseInlines
-    stringP "</italic>"
+    _ <- stringP "</italic>"
     return (Italic inlines)
 
 parseCode::Parser Inline
 parseCode = do
-    stringP "<code>"
+    _ <- stringP "<code>"
     text <- manyP (satisfy (/= '<'))
-    stringP "</code>"
+    _ <- stringP "</code>"
     return (Code text)
 
 parseLink::Parser Inline
 parseLink = do
-    stringP "<link"
-    skipWhitespace
+    _ <- stringP "<link"
+    _ <- skipWhitespace
     attrs <- parseAttributes
-    skipWhitespace
-    char '>'
+    _ <- skipWhitespace
+    _ <- char '>'
     text <- manyP (satisfy (/= '<'))
-    stringP "</link>"
+    _ <- stringP "</link>"
     let url = findAttr "href" attrs ""
     return (Link text url)
 
 parseImage::Parser Inline
 parseImage = do
-    stringP "<image"
-    skipWhitespace
+    _ <- stringP "<image"
+    _ <- skipWhitespace
     attrs <- parseAttributes
-    skipWhitespace
-    stringP ">"
-    skipWhitespace
-    stringP "</image>"
+    _ <- skipWhitespace
+    _ <- stringP ">"
+    _ <- skipWhitespace
+    _ <- stringP "</image>"
     let url = findAttr "src" attrs ""
     let alt = findAttr "alt" attrs ""
     return (Image alt url)

@@ -27,17 +27,17 @@ documentToJson (Document hdr body) =
     "}"
 
 headerToJson::Header -> String
-headerToJson header =
+headerToJson hdr =
     "{\n" ++
-    formatHeaderFields header ++
+    formatHeaderFields hdr ++
     "\n  }"
 
 -- | Format header fields
 formatHeaderFields::Header -> String
-formatHeaderFields (Header title author date) =
-    "    \"title\": \"" ++ escapeJson title ++ "\"" ++
-    addAuthor author ++
-    addDate date
+formatHeaderFields (Header titleVal authorVal dateVal) =
+    "    \"title\": \"" ++ escapeJson titleVal ++ "\"" ++
+    addAuthor authorVal ++
+    addDate dateVal
   where
     addAuthor Nothing = ""
     addAuthor (Just a) = ",\n    \"author\": \"" ++ escapeJson a ++ "\""
@@ -46,7 +46,7 @@ formatHeaderFields (Header title author date) =
 
 contentToJson::Content -> String
 contentToJson (Paragraph inlines) = formatParagraph inlines
-contentToJson (Section title contents) = formatSection title contents
+contentToJson (Section titleOpt contents) = formatSection titleOpt contents
 contentToJson (CodeBlock code) = formatCodeBlock code
 contentToJson (List items) = formatList items
 
@@ -57,10 +57,10 @@ formatParagraph inlines =
     "]\n    }"
 
 formatSection::Maybe String -> [Content] -> String
-formatSection title contents =
+formatSection titleOpt contents =
     "{\n      \"section\": {\n" ++
     "        \"title\": " ++
-    formatTitle title ++
+    formatTitle titleOpt ++
     ",\n" ++
     formatSectionContent contents ++
     "\n      }\n    }"

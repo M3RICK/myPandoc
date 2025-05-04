@@ -218,11 +218,11 @@ intingeger = orElse
 -- | Tuple (a,b) entre parenthèses
 tupleP :: Parser a -> Parser (a, a)
 tupleP p = do
-  char '('
+  _ <- char '('
   x <- p
-  char ','
+  _ <- char ','
   y <- p
-  char ')'
+  _ <- char ')'
   return (x, y)
 
 -- | Add Functor instance for Parser

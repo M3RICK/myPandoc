@@ -26,9 +26,9 @@ data JsonVal
 -- | Main entry point - Parse a full JSON document
 parseJson::Parser Document
 parseJson = do
-    skipWhitespace
+    _ <- skipWhitespace
     obj <- parseJsonObject
-    skipWhitespace
+    _ <- skipWhitespace
     convertToDocument obj
 
 -- | Convert JSON object to Document structure
@@ -220,11 +220,11 @@ extractStringField key fields = do
 -- | Parse a JSON object {key: value, ...}
 parseJsonObject::Parser [(String, JsonVal)]
 parseJsonObject = do
-    char '{'
-    skipWhitespace
+    _ <- char '{'
+    _ <- skipWhitespace
     pairs <- parseJsonPairs
-    skipWhitespace
-    char '}'
+    _ <- skipWhitespace
+    _ <- char '}'
     return pairs
 
 -- | Parse key-value pairs in a JSON object
@@ -244,7 +244,7 @@ parseJsonPairList = do
 -- | Parse remaining pairs after the first one
 parseRemainingPairs::(String, JsonVal) -> Parser [(String, JsonVal)]
 parseRemainingPairs pair = do
-    skipWhitespace
+    _ <- skipWhitespace
     input <- currentInput
     handleRemainingPairs pair input
 
@@ -258,26 +258,26 @@ handleRemainingPairs pair input
 -- | Parse the next pair after a comma
 parseNextPair::(String, JsonVal) -> Parser [(String, JsonVal)]
 parseNextPair pair = do
-    char ','
-    skipWhitespace
+    _ <- char ','
+    _ <- skipWhitespace
     rest <- parseJsonPairs
     return (pair : rest)
 
 -- | Parse a single key-value pair
 parseJsonPair::Parser (String, JsonVal)
 parseJsonPair = do
-    skipWhitespace
+    _ <- skipWhitespace
     key <- parseJsonString
-    skipWhitespace
-    char ':'
-    skipWhitespace
+    _ <- skipWhitespace
+    _ <- char ':'
+    _ <- skipWhitespace
     value <- parseJsonValue
     return (key, value)
 
 -- | Parse any JSON value
 parseJsonValue::Parser JsonVal
 parseJsonValue = do
-    skipWhitespace
+    _ <- skipWhitespace
     input <- currentInput
     if null input
         then emptyP
@@ -319,10 +319,10 @@ isNumberChar c = isDigit c || c == '.' ||
 -- | Parse a JSON string with proper escaping
 parseJsonString::Parser String
 parseJsonString = do
-    char '"'
-    content <- parseJsonStringContent
-    char '"'
-    return content
+    _ <- char '"'  -- Add the _ <- here
+    strContent <- parseJsonStringContent
+    _ <- char '"'  -- Add the _ <- here
+    return strContent
 
 -- | Parse the content of a JSON string
 parseJsonStringContent::Parser String
@@ -331,7 +331,7 @@ parseJsonStringContent = Parser $ \input ->
 
 -- | Helper function for parsing string content with escapes
 parseStringHelper::String -> String -> ParseResult String
-parseStringHelper acc "" = Nothing
+parseStringHelper _ "" = Nothing
 parseStringHelper acc ('"':rest) = Just (reverse acc, '"':rest)
 parseStringHelper acc ('\\':'"':rest) = parseStringHelper ('"':acc) rest
 parseStringHelper acc ('\\':'\\':rest) = parseStringHelper ('\\':acc) rest
@@ -344,11 +344,11 @@ parseStringHelper acc (c:rest) = parseStringHelper (c:acc) rest
 -- | Parse a JSON array [value, value, ...]
 parseJsonArray::Parser [JsonVal]
 parseJsonArray = do
-    char '['
-    skipWhitespace
+    _ <- char '['
+    _ <- skipWhitespace
     items <- parseJsonArrayItems
-    skipWhitespace
-    char ']'
+    _ <- skipWhitespace
+    _ <- char ']'
     return items
 
 -- | Parse items in a JSON array
@@ -367,7 +367,7 @@ parseJsonItemList = do
 
 parseItemRest::[JsonVal] -> Parser [JsonVal]
 parseItemRest items = do
-    skipWhitespace
+    _ <- skipWhitespace
     input <- currentInput
     handleItemRest items input
 
@@ -381,8 +381,8 @@ handleItemRest items input
 -- | Parse the next items after a comma
 parseNextItems::[JsonVal] -> Parser [JsonVal]
 parseNextItems items = do
-    char ','
-    skipWhitespace
+    _ <- char ','
+    _ <- skipWhitespace
     item <- parseJsonValue
     parseItemRest (items ++ [item])
 

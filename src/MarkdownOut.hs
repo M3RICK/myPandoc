@@ -19,19 +19,19 @@ documentToMarkdown (Document hdr body) =
 
 -- | Convert Header to Markdown
 headerToMarkdown :: Header -> String
-headerToMarkdown (Header title author date) =
+headerToMarkdown (Header titleVal authorVal dateVal) =
     "---\n" ++
-    "title: " ++ title ++ "\n" ++
-    maybe "" (\a -> "author: " ++ a ++ "\n") author ++
-    maybe "" (\d -> "date: " ++ d ++ "\n") date ++
+    "title: " ++ titleVal ++ "\n" ++
+    maybe "" (\a -> "author: " ++ a ++ "\n") authorVal ++
+    maybe "" (\d -> "date: " ++ d ++ "\n") dateVal ++
     "---"
 
 -- | Convert Content to Markdown
 contentToMarkdown :: Content -> String
 contentToMarkdown (Paragraph inlines) =
     concatMap inlineToMarkdown inlines ++ "\n\n"
-contentToMarkdown (Section title contents) =
-    case title of
+contentToMarkdown (Section titleOpt contents) =
+    case titleOpt of
         Just t -> "## " ++ t ++ "\n\n" ++ concatMap contentToMarkdown contents
         Nothing -> concatMap contentToMarkdown contents
 contentToMarkdown (CodeBlock code) =

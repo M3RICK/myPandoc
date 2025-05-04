@@ -8,7 +8,7 @@
 module Main (main) where
 
 import System.Environment (getArgs)
-import System.IO (hPutStrLn, stderr, writeFile)
+import System.IO (hPutStrLn, stderr)
 import System.Exit (exitWith, ExitCode(ExitFailure))
 import ArgsParser (parseArgs, ConvertInfo(..))
 import Document (Document(..))
@@ -87,8 +87,9 @@ parseXmlInput content' =
     let result = run parseXml content' in
     if isNothing result
         then exitWithError "Failed to parse XML input"
-        else let Just (doc, _) = result in
-             return doc
+        else case result of
+            Just (doc, _) -> return doc
+            Nothing -> exitWithError "Failed to parse input"
 
 -- | Parse JSON input
 parseJsonInput :: String -> IO Document
@@ -96,8 +97,9 @@ parseJsonInput content' =
     let result = run parseJson content' in
     if isNothing result
         then exitWithError "Failed to parse JSON input"
-        else let Just (doc, _) = result in
-             return doc
+        else case result of
+            Just (doc, _) -> return doc
+            Nothing -> exitWithError "Failed to parse input"
 
 -- | Parse input file based on format
 parseInputFile :: ConvertInfo -> String -> IO Document

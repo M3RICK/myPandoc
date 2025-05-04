@@ -22,19 +22,19 @@ documentToXml (Document hdr body) =
 
 -- | Convert Header to XML
 headerToXml :: Header -> String
-headerToXml (Header title author date) =
-    "<header title=\"" ++ escapeXml title ++ "\"" ++
-    maybe "" (\a -> " author=\"" ++ escapeXml a ++ "\"") author ++
-    maybe "" (\d -> " date=\"" ++ escapeXml d ++ "\"") date ++
+headerToXml (Header titleVal authorVal dateVal) =
+    "<header title=\"" ++ escapeXml titleVal ++ "\"" ++
+    maybe "" (\a -> " author=\"" ++ escapeXml a ++ "\"") authorVal ++
+    maybe "" (\d -> " date=\"" ++ escapeXml d ++ "\"") dateVal ++
     "></header>"
 
 -- | Convert Content to XML
 contentToXml :: Content -> String
 contentToXml (Paragraph inlines) =
     "<paragraph>" ++ concatMap inlineToXml inlines ++ "</paragraph>\n"
-contentToXml (Section title contents) =
+contentToXml (Section titleOpt contents) =
     "<section" ++
-    maybe "" (\t -> " title=\"" ++ escapeXml t ++ "\"") title ++
+    maybe "" (\t -> " title=\"" ++ escapeXml t ++ "\"") titleOpt ++
     ">\n" ++ 
     concatMap (indent 2 . contentToXml) contents ++
     "</section>\n"
