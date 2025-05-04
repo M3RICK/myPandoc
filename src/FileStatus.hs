@@ -13,7 +13,7 @@ import System.IO (openFile, IOMode(ReadMode), hClose, hFileSize)
 import System.Exit (exitWith, ExitCode(ExitFailure))
 import System.IO.Error (isDoesNotExistError)
 import Control.Exception (try)
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Data.Char (toLower, isSpace)
 import Data.List (dropWhileEnd, isInfixOf, isPrefixOf)
 
@@ -45,30 +45,36 @@ isFileEmpty filePath =
       hClose handle >>
       return (fileSize == 0)
 
--- | Validate file content for XML format - IMPROVED TO BE MORE FLEXIBLE
+-- | Validate file content for XML format
 validateXml :: String -> Bool
 validateXml content =
   let trimmed = trim content in
-  -- Accept XML with whitespace, XML declarations, or different root tags
-  -- as long as it has opening and closing tags
+  -- More flexible XML detection
   ("<" `isPrefixOf` trimmed) &&
   (">" `isInfixOf` trimmed) &&
-  ("</" `isInfixOf` trimmed)
+  ("</" `isInfixOf` trimmed) &&
+  ("<document>" `isInfixOf` trimmed)
 
--- | Validate file content for JSON format - IMPROVED TO BE MORE FLEXIBLE
+-- | Validate file content for JSON format
 validateJson :: String -> Bool
 validateJson content =
   let trimmed = trim content in
-  -- Accept JSON with whitespace before the opening brace/bracket
-  -- Also accept arrays as root elements
-  ("{" `isPrefixOf` trimmed) || ("[" `isPrefixOf` trimmed)
+  -- More flexible JSON detection
+  ("{" `isPrefixOf` trimmed) &&
+  ("}" `isInfixOf` trimmed) &&
+  ("\"header\"" `isInfixOf` trimmed)
 
--- | Validate file content for Markdown format - IMPROVED TO BE MORE FLEXIBLE
+-- | Validate file content for Markdown format
 validateMarkdown :: String -> Bool
 validateMarkdown content =
   -- Accept any non-empty content as potential Markdown
-  -- Don't require YAML frontmatter
-  not (all isSpace content)
+  -- Check for common Markdown elements
+  let trimmed = trim content
+  in not (all isSpace trimmed) &&
+     ("---" `isPrefixOf` trimmed ||
+      "#" `isPrefixOf` trimmed ||
+      "*" `isInfixOf` trimmed ||
+      "-" `isInfixOf` trimmed)
 
 -- | checks more flexibly for correct format structure
 isValidContent :: String -> FilePath -> IO Bool
@@ -103,7 +109,7 @@ validateFile fmt filePath =
   doesFileExist' filePath >>= \exists ->
   unless exists (handleNonExistentFile filePath) >>
   isFileEmpty filePath >>= \isEmpty ->
-  unless (not isEmpty) (handleEmptyFile filePath) >>
+  when isEmpty (handleEmptyFile filePath) >> -- Use 'when' instead of 'unless (not isEmpty)'
   isValidContent fmt filePath >>= \isValid ->
   unless isValid (handleInvalidContent fmt)
 
@@ -111,9 +117,10 @@ validateFile fmt filePath =
 detectFormat :: FilePath -> IO String
 detectFormat filePath = do
   content <- readFile filePath
-  identifyFormat (trim content)
-  where
-    identifyFormat c
-      | take 1 c == "<" || "<?xml" `isPrefixOf` c = return "xml"
-      | take 1 c == "{" || take 1 c == "[" = return "json"
-      | otherwise = return "markdown"  -- Default to markdown
+  let trimmed = trim content
+  
+  -- Improved format detection logic
+  case () of
+    _ | validateXml trimmed  -> return "xml"
+      | validateJson trimmed -> return "json"
+      | otherwise           -> return "markdown"  -- Default to markdown

@@ -57,9 +57,9 @@ extractHeader obj = do
 extractHeaderFields::[(String, JsonVal)] -> Maybe Header
 extractHeaderFields fields = do
     title' <- extractStringField "title" fields
-    author' <- extractStringField "author" fields
-    date' <- extractStringField "date" fields
-    return (Header title' (Just author') (Just date'))
+    let author' = extractStringField "author" fields
+    let date' = extractStringField "date" fields
+    return (Header title' author' date')
 
 -- | Extract body in school format
 extractBody::[(String, JsonVal)] -> Maybe [Content]
@@ -71,88 +71,72 @@ extractBody obj = do
 
 -- | Extract content in school format
 extractContent::JsonVal -> Maybe Content
-extractContent (JsonArr elements) =
-    Just (Paragraph (mapArrayToInlines elements))
-extractContent (JsonObj fields) =
-    extractObjectContent fields
-extractContent _ = Nothing
-
--- | Extract content from object fields
-extractObjectContent::[(String, JsonVal)] -> Maybe Content
-extractObjectContent fields
+extractContent (JsonObj fields)
     | Just section <- extractSection fields = Just section
+    | Just paragraph <- extractParagraph fields = Just paragraph
     | Just codeblock <- extractCodeblock fields = Just codeblock
     | Just list <- extractList fields = Just list
     | otherwise = Nothing
+extractContent _ = Nothing
+
+-- | Extract paragraph from object fields
+extractParagraph::[(String, JsonVal)] -> Maybe Content
+extractParagraph fields = do
+    paragraphVal <- lookup "paragraph" fields
+    case paragraphVal of
+        JsonArr inlines -> Just (Paragraph (mapArrayToInlines inlines))
+        _ -> Nothing
 
 -- | Extract section in school format
 extractSection::[(String, JsonVal)] -> Maybe Content
 extractSection fields = do
     sectionVal <- lookup "section" fields
-    extractSectionContent sectionVal
+    case sectionVal of
+        JsonObj secFields -> extractSectionContent secFields
+        _ -> Nothing
 
 -- | Extract section content
-extractSectionContent::JsonVal -> Maybe Content
-extractSectionContent (JsonObj secFields) = do
-    -- Get title (might be empty string)
-    let title' = getTitleFromFields secFields
+extractSectionContent::[(String, JsonVal)] -> Maybe Content
+extractSectionContent secFields = do
+    -- Get title (might be null)
+    let title' = case lookup "title" secFields of
+                    Just (JsonStr t) -> Just t
+                    Just JsonNull -> Nothing
+                    _ -> Nothing
 
     -- Get content array
     contentVal <- lookup "content" secFields
-    contents' <- extractContentArray contentVal
-    return (Section title' contents')
-extractSectionContent _ = Nothing
-
--- | Get title from section fields
-getTitleFromFields::[(String, JsonVal)] -> Maybe String
-getTitleFromFields fields =
-    case lookup "title" fields of
-        Just (JsonStr t) -> Just t
-        _ -> Just ""
-
--- | Extract content array from JsonVal
-extractContentArray::JsonVal -> Maybe [Content]
-extractContentArray (JsonArr elements) = mapM extractContent elements
-extractContentArray _ = Nothing
+    case contentVal of
+        JsonArr elements -> do
+            contents' <- mapM extractContent elements
+            return (Section title' contents')
+        _ -> Nothing
 
 -- | Extract codeblock in school format
 extractCodeblock::[(String, JsonVal)] -> Maybe Content
 extractCodeblock fields = do
     codeVal <- lookup "codeblock" fields
     case codeVal of
-        JsonArr elements ->
-            let codeText = concatMap jsonValToString elements
-            in Just (CodeBlock codeText)
         JsonStr code -> Just (CodeBlock code)
         _ -> Nothing
-
--- | Convert JsonVal to string
-jsonValToString::JsonVal -> String
-jsonValToString (JsonStr s) = s
-jsonValToString (JsonNum n) = show n
-jsonValToString (JsonBool True) = "true"
-jsonValToString (JsonBool False) = "false"
-jsonValToString JsonNull = "null"
-jsonValToString (JsonArr arr) = concatMap jsonValToString arr
-jsonValToString (JsonObj _) = ""
 
 -- | Extract list in school format
 extractList::[(String, JsonVal)] -> Maybe Content
 extractList fields = do
     listVal <- lookup "list" fields
-    extractListItems listVal
-
--- | Extract list items
-extractListItems::JsonVal -> Maybe Content
-extractListItems (JsonArr items) = do
-    listItems <- mapM extractListItem items
-    return (List listItems)
-extractListItems _ = Nothing
+    case listVal of
+        JsonArr items -> do
+            listItems <- mapM extractListItem items
+            return (List listItems)
+        _ -> Nothing
 
 -- | Extract list item in school format
 extractListItem::JsonVal -> Maybe ListItem
-extractListItem (JsonArr elements) =
-    Just (ListItem (mapArrayToInlines elements))
+extractListItem (JsonObj fields) = do
+    itemVal <- lookup "item" fields
+    case itemVal of
+        JsonArr elements -> Just (ListItem (mapArrayToInlines elements))
+        _ -> Nothing
 extractListItem _ = Nothing
 
 -- | Convert array of JSON values to array of Inlines
@@ -179,19 +163,20 @@ extractInline _ = Nothing
 
 -- | Extract bold in school format
 extractBold::[(String, JsonVal)] -> Maybe Inline
-extractBold fields = extractFormattingInline "bold" Bold fields
+extractBold fields = do
+    boldVal <- lookup "bold" fields
+    case boldVal of
+        JsonArr elements -> Just (Bold (mapArrayToInlines elements))
+        JsonStr text -> Just (Bold [PlainText text])
+        _ -> Nothing
 
 -- | Extract italic in school format
 extractItalic::[(String, JsonVal)] -> Maybe Inline
-extractItalic fields = extractFormattingInline "italic" Italic fields
-
--- | Helper to extract formatting inline elements
-extractFormattingInline::String -> ([Inline] -> Inline) -> [(String, JsonVal)] -> Maybe Inline
-extractFormattingInline key constructor fields = do
-    val <- lookup key fields
-    case val of
-        JsonStr text -> Just (constructor [PlainText text])
-        JsonArr elements -> Just (constructor (mapArrayToInlines elements))
+extractItalic fields = do
+    italicVal <- lookup "italic" fields
+    case italicVal of
+        JsonArr elements -> Just (Italic (mapArrayToInlines elements))
+        JsonStr text -> Just (Italic [PlainText text])
         _ -> Nothing
 
 -- | Extract code in school format
@@ -207,44 +192,22 @@ extractLink::[(String, JsonVal)] -> Maybe Inline
 extractLink fields = do
     linkVal <- lookup "link" fields
     case linkVal of
-        JsonObj linkFields -> extractLinkFields linkFields
+        JsonObj linkFields -> do
+            url <- extractStringField "url" linkFields
+            text <- extractStringField "text" linkFields
+            return (Link text url)
         _ -> Nothing
-
--- | Extract link fields
-extractLinkFields::[(String, JsonVal)] -> Maybe Inline
-extractLinkFields linkFields = do
-    url <- extractStringField "url" linkFields
-    contentVal <- lookup "content" linkFields
-    let text = extractLinkText contentVal
-    return (Link text url)
-
--- | Extract link text from content
-extractLinkText::JsonVal -> String
-extractLinkText (JsonArr elements) = concatMap jsonValToString elements
-extractLinkText (JsonStr text) = text
-extractLinkText _ = ""
 
 -- | Extract image in school format
 extractImage::[(String, JsonVal)] -> Maybe Inline
 extractImage fields = do
     imageVal <- lookup "image" fields
     case imageVal of
-        JsonObj imageFields -> extractImageFields imageFields
+        JsonObj imageFields -> do
+            url <- extractStringField "url" imageFields
+            alt <- extractStringField "alt" imageFields
+            return (Image alt url)
         _ -> Nothing
-
--- | Extract image fields
-extractImageFields::[(String, JsonVal)] -> Maybe Inline
-extractImageFields imageFields = do
-    url <- extractStringField "url" imageFields
-    altVal <- lookup "alt" imageFields
-    let alt = extractImageAlt altVal
-    return (Image alt url)
-
--- | Extract image alt text
-extractImageAlt::JsonVal -> String
-extractImageAlt (JsonArr elements) = concatMap jsonValToString elements
-extractImageAlt (JsonStr alt) = alt
-extractImageAlt _ = ""
 
 -- | Extract a string field from JSON object
 extractStringField::String -> [(String, JsonVal)] -> Maybe String

@@ -32,44 +32,24 @@ parseDocumentContent = do
 
 parseEPITECHHeader::Parser Header
 parseEPITECHHeader = do
-    parseHeaderTag
+    skipWhitespace
+    stringP "<header"
+    skipWhitespace
     attrs <- parseAttributes
     skipWhitespace
-    char '>'
-    headerElements <- parseHeaderElements
-    let title' = findAttr "title" attrs ""
-    return (Header title' (fst headerElements) (snd headerElements))
-
-parseHeaderTag::Parser ()
-parseHeaderTag =
-    skipWhitespace >>
-    stringP "<header" >>
-    skipWhitespace >>
-    return ()
-
-parseHeaderElements::Parser (Maybe String, Maybe String)
-parseHeaderElements = do
-    skipWhitespace
-    authorOpt <- optionP Nothing parseAuthorElement
-    skipWhitespace
-    dateOpt <- optionP Nothing parseDateElement
+    stringP ">"
     skipWhitespace
     stringP "</header>"
-    return (authorOpt, dateOpt)
+    let title' = findAttr "title" attrs ""
+    let author' = findAttrOpt "author" attrs
+    let date' = findAttrOpt "date" attrs
+    return (Header title' author' date')
 
-parseAuthorElement::Parser (Maybe String)
-parseAuthorElement = do
-    stringP "<author>"
-    author <- manyP (satisfy (/= '<'))
-    stringP "</author>"
-    return (Just author)
-
-parseDateElement::Parser (Maybe String)
-parseDateElement = do
-    stringP "<date>"
-    date <- manyP (satisfy (/= '<'))
-    stringP "</date>"
-    return (Just date)
+findAttrOpt::String -> [(String, String)] -> Maybe String
+findAttrOpt name attrs =
+    case lookup name attrs of
+        Just value -> Just value
+        Nothing -> Nothing
 
 parseDocumentBody::Parser [Content]
 parseDocumentBody = do
@@ -107,10 +87,11 @@ findAttr name attrs defaultValue =
         Nothing -> defaultValue
 
 parseContent::Parser Content
-parseContent = parseParagraph `orElse`
-              parseSection `orElse`
-              parseCodeBlock `orElse`
-              parseList
+parseContent = 
+    parseSection `orElse`
+    parseParagraph `orElse`
+    parseCodeBlock `orElse`
+    parseList
 
 parseParagraph::Parser Content
 parseParagraph = do
@@ -147,53 +128,40 @@ parseCodeBlock::Parser Content
 parseCodeBlock = do
     skipWhitespace
     stringP "<codeblock>"
-    skipWhitespace
-    codeContents <- manyP (parseContent <* skipWhitespace)
+    code <- manyP (satisfy (/= '<'))
     stringP "</codeblock>"
-    let codeStr = contentToString codeContents
-    return (CodeBlock codeStr)
-
-contentToString::[Content] -> String
-contentToString [] = ""
-contentToString (Paragraph inlines:rest) =
-    concatMap inlineToString inlines ++ "\n" ++ contentToString rest
-contentToString (_:rest) = contentToString rest
-
-inlineToString::Inline -> String
-inlineToString (PlainText text) = text
-inlineToString (Bold inlines) = concatMap inlineToString inlines
-inlineToString (Italic inlines) = concatMap inlineToString inlines
-inlineToString (Code text) = text
-inlineToString (Link text _) = text
-inlineToString (Image alt _) = alt
+    return (CodeBlock code)
 
 parseList::Parser Content
 parseList = do
     skipWhitespace
     stringP "<list>"
     skipWhitespace
-    paragraphs <- manyP (parseParagraph <* skipWhitespace)
-    let items = map paragraphToListItem paragraphs
+    items <- manyP (parseListItem <* skipWhitespace)
     stringP "</list>"
     return (List items)
 
-paragraphToListItem::Content -> ListItem
-paragraphToListItem (Paragraph inlines) = ListItem inlines
-paragraphToListItem _ = ListItem [PlainText ""]
+parseListItem::Parser ListItem
+parseListItem = do
+    skipWhitespace
+    stringP "<item>"
+    inlines <- parseInlines
+    stringP "</item>"
+    return (ListItem inlines)
 
 parseInlines::Parser [Inline]
 parseInlines = manyP parseInline
 
 parseInline::Parser Inline
-parseInline = parsePlainText `orElse` parseFormattedInline
+parseInline = parseFormattedInline `orElse` parsePlainText
 
 parseFormattedInline::Parser Inline
 parseFormattedInline =
     parseBold `orElse`
     parseItalic `orElse`
     parseCode `orElse`
-    parseEPITECHLink `orElse`
-    parseEPITECHImage
+    parseLink `orElse`
+    parseImage
 
 parsePlainText::Parser Inline
 parsePlainText = Parser $ \input ->
@@ -221,8 +189,8 @@ parseCode = do
     stringP "</code>"
     return (Code text)
 
-parseEPITECHLink::Parser Inline
-parseEPITECHLink = do
+parseLink::Parser Inline
+parseLink = do
     stringP "<link"
     skipWhitespace
     attrs <- parseAttributes
@@ -230,17 +198,18 @@ parseEPITECHLink = do
     char '>'
     text <- manyP (satisfy (/= '<'))
     stringP "</link>"
-    let url = findAttr "url" attrs ""
+    let url = findAttr "href" attrs ""
     return (Link text url)
 
-parseEPITECHImage::Parser Inline
-parseEPITECHImage = do
+parseImage::Parser Inline
+parseImage = do
     stringP "<image"
     skipWhitespace
     attrs <- parseAttributes
     skipWhitespace
-    char '>'
-    alt <- manyP (satisfy (/= '<'))
+    stringP ">"
+    skipWhitespace
     stringP "</image>"
-    let url = findAttr "url" attrs ""
+    let url = findAttr "src" attrs ""
+    let alt = findAttr "alt" attrs ""
     return (Image alt url)

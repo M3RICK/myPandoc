@@ -23,8 +23,7 @@ documentToXml (Document hdr body) =
 -- | Convert Header to XML
 headerToXml :: Header -> String
 headerToXml (Header title author date) =
-    "<header" ++
-    " title=\"" ++ escapeXml title ++ "\"" ++
+    "<header title=\"" ++ escapeXml title ++ "\"" ++
     maybe "" (\a -> " author=\"" ++ escapeXml a ++ "\"") author ++
     maybe "" (\d -> " date=\"" ++ escapeXml d ++ "\"") date ++
     "></header>"
