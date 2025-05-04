@@ -1,0 +1,60 @@
+{
+  "header": {
+    "title": "Complex Test",
+    "author": "Test Expert",
+    "date": "2024-05-01"
+  },
+  "body": [
+    {
+      "section": {
+        "title": "Introduction",
+        "content": [
+          {
+      "paragraph": ["This is a ", {
+        "bold": ["complex"]
+      }, " document with ", {
+        "italic": ["various"]
+      }, " formatting."]
+    },
+          {
+      "section": {
+        "title": "Subsection",
+        "content": [
+          {
+      "paragraph": ["This is a subsection with ", {
+        "code": "inline code"
+      }, "."]
+    },
+          {
+      "codeblock": "function test() {\n  return \"Hello World\";\n}"
+    }
+        ]
+      }
+    }
+        ]
+      }
+    },
+          {
+      "section": {
+        "title": "Conclusion",
+        "content": [
+          {
+      "paragraph": ["This is the ", {
+        "bold": ["conclusion"]
+      }, " section."]
+    },
+          {
+      "list": [
+        {
+          "item": ["First item"]
+        },
+          {
+          "item": ["Second item"]
+        }
+      ]
+    }
+        ]
+      }
+    }
+  ]
+}

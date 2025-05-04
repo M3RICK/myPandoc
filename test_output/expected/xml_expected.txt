@@ -1,0 +1,59 @@
+<?xml version="1.0" ?>
+<document>
+  
+  
+  <header title="Contents" author="Fornes Leo" date="2024-01-01"/>
+  
+  
+  <body>
+    
+    
+    <section title="Title">
+      
+      
+      <paragraph>
+        This is a 
+        <bold>basic</bold>
+         markdown file. It 
+        <italic>must</italic>
+         be parsed correctly.
+      </paragraph>
+      
+      
+      <section title="Subtitle">
+        
+        
+        <paragraph>Description of the subtitle</paragraph>
+        
+      
+      </section>
+      
+      
+      <section title="Subsubtitle">
+        
+        
+        <codeblock>This is a Code block inside a subsubtitle</codeblock>
+        
+      
+      </section>
+      
+    
+    </section>
+    
+    
+    <section title="Another Title">
+      
+      
+      <paragraph>
+        <code>Random</code>
+         paragraph
+      </paragraph>
+      
+    
+    </section>
+    
+  
+  </body>
+  
+
+</document>

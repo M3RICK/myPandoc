@@ -1,0 +1,70 @@
+{
+  "header": {
+    "title": "Contents",
+    "author": "Fornes Leo",
+    "date": "2024-01-01"
+  },
+  "body": [
+    {
+      "section": {
+        "title": "Title",
+        "content": [
+          {
+            "paragraph": [
+              "This is a ",
+              {
+                "bold": [
+                  "basic"
+                ]
+              },
+              " markdown file. It ",
+              {
+                "italic": [
+                  "must"
+                ]
+              },
+              " be parsed correctly."
+            ]
+          },
+          {
+            "section": {
+              "title": "Subtitle",
+              "content": [
+                {
+                  "paragraph": [
+                    "Description of the subtitle"
+                  ]
+                },
+                {
+                  "section": {
+                    "title": "Subsubtitle",
+                    "content": [
+                      {
+                        "codeblock": "This is a Code block inside a subsubtitle"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "section": {
+        "title": "Another Title",
+        "content": [
+          {
+            "paragraph": [
+              {
+                "code": "Random"
+              },
+              " paragraph"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
