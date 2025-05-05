@@ -1,7 +1,7 @@
 #  myPandoc - Document Converter
 
 ## What's This All About?
-Hey there! Welcome to myPandoc, our cool and hip and swag and crazy and fun and rad take on the famous Pandoc document converter for the B-FUN-400 project. This nifty tool transforms documents between formats like it's no big deal! XML to Markdown? JSON to XML? No sweat!
+Hey there! Welcome to myPandoc, our cool take on the famous Pandoc document converter for the B-FUN-400 project. This nifty tool transforms documents between formats like it's no big deal! XML to Markdown? JSON to XML? No sweat!
 
 ## Cool Stuff It Does
 - Magically converts documents between different formats
