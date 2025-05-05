@@ -1,52 +1,59 @@
-#  myPandoc - Document Converter
+# myPandoc - Document Converter
 
-## What's This All About?
-Hey there! Welcome to myPandoc, our cool take on the famous Pandoc document converter for the B-FUN-400 project. This nifty tool transforms documents between formats like it's no big deal! XML to Markdown? JSON to XML? No sweat!
+## What's This?
 
-## Cool Stuff It Does
-- Magically converts documents between different formats
-- Has its very own homemade parsing library
-- Handles documents with all sorts of fancy elements
-- Super friendly command-line interface that won't bite
+Welcome to **myPandoc**, our creative take on the legendary Pandoc converter for the **B-FUN-400** project. It’s a lightweight tool that effortlessly converts documents between XML, JSON, and Markdown.
 
-## 📄 Formats It Speaks
-- **Can Read**: XML, JSON, and Markdown
-- **Can Write**: XML, JSON, and Markdown
+## Features
 
-## 📝 What's In A Document?
-Documents in myPandoc's world have:
-1. **Headers**
-   - Title
-   - Author
-   - Date
-   
-2. **Content**
-   - Plain text
-   - Fancy formatting 
-   - Links and images 
-   - Paragraphs, sections, and code blocks 
-   - Lists 
+- Converts between **XML**, **JSON**, and **Markdown**
+- Custom-built **parsing library**
+- Handles headers, text, formatting, code blocks, lists, links, and more
+- Friendly command-line interface
+- Clear error reporting (with exit code `84`)
 
-## Setting Up Shop
+## 📄 Supported Formats
+
+| Can Read   | Can Write  |
+|------------|------------|
+| XML        | XML        |
+| JSON       | JSON       |
+| Markdown   | Markdown   |
+
+## Document Structure
+
+Each document can contain:
+
+- **Headers**: Title, Author, Date
+- **Content**:
+  - Plain and formatted text
+  - Links, images
+  - Lists (ordered/unordered)
+  - Paragraphs, sections, code blocks
+
+## Setup
+
 You'll need:
-- GHC (that Haskell compiler thing)
-- Stack (version 2.1.3+ because.)
-- Make (make)
 
-Getting started is a piece of cake:
+- [GHC](https://www.haskell.org/ghc/)
+- [Stack ≥ 2.1.3](https://docs.haskellstack.org/)
+- `make`
+
+### Clone and Build
+
 ```bash
-git clone <wherever-the-link-is>
+git clone <your-repo-url>
 cd myPandoc
 make
 ```
 
-## How To Use This Thing
+## How To Use This
 
 ```
 ./mypandoc -i ifile -f oformat [-o ofile] [-e iformat]
 ```
 
-### The Command Decoder Ring:
+### The Command Decoder:
 - `-i ifile`: Where's your document hiding? (mandatory)
 - `-f oformat`: What format do you want? (xml, json, markdown) (mandatory)
 - `-o ofile`: Where should I put the result? 
@@ -54,12 +61,12 @@ make
 
 ### Example Time!
 
-Turn XML into Markdown (the cool way):
+Turn XML into Markdown):
 ```bash
 ./mypandoc -i super-important-doc.xml -f markdown
 ```
 
-JSON to XML conversion (for the XML enthusiasts):
+JSON to XML conversion:
 ```bash
 ./mypandoc -i data-blob.json -f xml -o now-its-xml.xml
 ```
