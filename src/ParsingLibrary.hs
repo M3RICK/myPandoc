@@ -42,7 +42,7 @@ module ParsingLibrary
   , exactWord
 
   , natural
-  , intingeger
+  , integer
   , tupleP
   ) where
 
@@ -208,8 +208,8 @@ natural::Parser Int
 natural = mapP read (someP digit)
 
 -- | Entier signé (+ ou -)
-intingeger::Parser Int
-intingeger = orElse
+integer::Parser Int
+integer = orElse
   (thenP (char '-') $ \_ r -> case run natural r of
     Just (n, rest) -> Just (-n, rest)
     Nothing -> Nothing)
